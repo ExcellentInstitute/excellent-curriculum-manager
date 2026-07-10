@@ -3,47 +3,119 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Excellent Institute | Admin Workspace</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title>Excellent Institute | Command Center</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div id="login-section" class="screen-container">
         <div class="auth-card">
-            <div class="brand-header">
-                <div class="logo-placeholder">EI</div>
-                <h2>Excellent Institute</h2>
-                <p>Command Center Access</p>
+            <div class="brand-logo">
+                <i class='bx bxs-graduation'></i>
             </div>
-            <div class="input-group">
-                <input type="password" id="passInput" placeholder="Enter Secure Passcode">
+            <h2>Excellent Institute</h2>
+            <p class="subtitle">Secure Admin Workspace</p>
+            
+            <div class="input-wrapper">
+                <i class='bx bx-lock-alt icon-left'></i>
+                <input type="password" id="passInput" placeholder="Enter System Passcode">
             </div>
-            <button id="loginBtn" class="btn-primary">Unlock Dashboard</button>
+            
+            <button id="loginBtn" class="btn-primary">
+                Unlock System <i class='bx bx-right-arrow-alt'></i>
+            </button>
             <p id="loginError" class="error-text"></p>
         </div>
     </div>
 
     <div id="dashboard-section" class="screen-container hidden">
+        
         <header class="top-nav">
             <div class="nav-brand">
-                <div class="logo-placeholder small">EI</div>
-                <h3>Admin Workspace</h3>
+                <div class="brand-logo small"><i class='bx bxs-graduation'></i></div>
+                <div>
+                    <h3>Command Center</h3>
+                    <span class="version-tag">Deployment Engine v2.0</span>
+                </div>
             </div>
-            <button id="logoutBtn" class="btn-secondary">Lock System</button>
+            <div class="nav-actions">
+                <div class="admin-profile">
+                    <div class="avatar"><i class='bx bx-user'></i></div>
+                    <span>Admin Active</span>
+                </div>
+                <button id="logoutBtn" class="btn-icon" title="Lock System">
+                    <i class='bx bx-log-out-circle'></i>
+                </button>
+            </div>
         </header>
 
         <main class="dashboard-content">
-            <div class="dashboard-header">
-                <h2>Content Manager</h2>
-                <p>Repository auto-scanned. Assign a class and click Publish to send to all student devices.</p>
-                <p id="systemStatus" class="status-text" style="text-align: left; margin-top: 10px;"></p>
+            
+            <section class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-icon live-icon"><i class='bx bx-broadcast'></i></div>
+                    <div class="stat-info">
+                        <p>Live in App</p>
+                        <h3 id="statLiveCount">--</h3>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon offline-icon"><i class='bx bx-archive-in'></i></div>
+                    <div class="stat-info">
+                        <p>Offline / Pending</p>
+                        <h3 id="statOfflineCount">--</h3>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon total-icon"><i class='bx bx-folder'></i></div>
+                    <div class="stat-info">
+                        <p>Total Scanned Files</p>
+                        <h3 id="statTotalCount">--</h3>
+                    </div>
+                </div>
+            </section>
+
+            <section class="controls-row">
+                <div class="search-box">
+                    <i class='bx bx-search'></i>
+                    <input type="text" id="searchInput" placeholder="Search subjects (e.g., ଗଣିତ)...">
+                </div>
+                <div class="filter-box">
+                    <i class='bx bx-filter'></i>
+                    <select id="classFilter">
+                        <option value="ALL">All Classes</option>
+                        <option value="ପ୍ରଥମ ଶ୍ରେଣୀ">ପ୍ରଥମ ଶ୍ରେଣୀ (Class 1)</option>
+                        <option value="ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ">ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ (Class 2)</option>
+                        <option value="ତୃତୀୟ ଶ୍ରେଣୀ">ତୃତୀୟ ଶ୍ରେଣୀ (Class 3)</option>
+                        <option value="ଚତୁର୍ଥ ଶ୍ରେଣୀ">ଚତୁର୍ଥ ଶ୍ରେଣୀ (Class 4)</option>
+                        <option value="ପଞ୍ଚମ ଶ୍ରେଣୀ">ପଞ୍ଚମ ଶ୍ରେଣୀ (Class 5)</option>
+                        <option value="ଷଷ୍ଠ ଶ୍ରେଣୀ">ଷଷ୍ଠ ଶ୍ରେଣୀ (Class 6)</option>
+                        <option value="ସପ୍ତମ ଶ୍ରେଣୀ">ସପ୍ତମ ଶ୍ରେଣୀ (Class 7)</option>
+                        <option value="ଅଷ୍ଟମ ଶ୍ରେଣୀ">ଅଷ୍ଟମ ଶ୍ରେଣୀ (Class 8)</option>
+                        <option value="ନବମ ଶ୍ରେଣୀ">ନବମ ଶ୍ରେଣୀ (Class 9)</option>
+                        <option value="ଦଶମ ଶ୍ରେଣୀ">ଦଶମ ଶ୍ରେଣୀ (Class 10)</option>
+                    </select>
+                </div>
+                <button id="refreshBtn" class="btn-secondary">
+                    <i class='bx bx-refresh'></i> Sync Repo
+                </button>
+            </section>
+
+            <div id="systemStatus" class="status-indicator">
+                <i class='bx bx-loader-alt bx-spin'></i> Initializing Command Center...
             </div>
 
-            <div id="content-grid" class="content-grid">
-                </div>
+            <section id="content-grid" class="content-grid">
+                </section>
+
         </main>
     </div>
+
+    <div id="toast-container" class="toast-container"></div>
 
     <script type="module" src="app.js"></script>
 </body>
