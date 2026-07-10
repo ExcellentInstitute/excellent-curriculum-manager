@@ -55,7 +55,12 @@
 
         <main class="dashboard-content">
             
-            <section class="stats-row">
+            <div class="tabs-container">
+                <button id="tabSubjectsBtn" class="tab-btn active"><i class='bx bx-book-open'></i> Subject Materials</button>
+                <button id="tabClassesBtn" class="tab-btn"><i class='bx bx-image'></i> Class Covers</button>
+            </div>
+
+            <section id="statsRow" class="stats-row">
                 <div class="stat-card">
                     <div class="stat-icon live-icon"><i class='bx bx-broadcast'></i></div>
                     <div class="stat-info">
@@ -79,7 +84,7 @@
                 </div>
             </section>
 
-            <section class="controls-row">
+            <section id="controlsRow" class="controls-row">
                 <div class="search-box">
                     <i class='bx bx-search'></i>
                     <input type="text" id="searchInput" placeholder="Search subjects (e.g., ଗଣିତ)...">
@@ -109,8 +114,9 @@
                 <i class='bx bx-loader-alt bx-spin'></i> Initializing Command Center...
             </div>
 
-            <section id="content-grid" class="content-grid">
-                </section>
+            <section id="content-grid" class="content-grid"></section>
+
+            <section id="class-grid" class="content-grid hidden"></section>
 
         </main>
     </div>
