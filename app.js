@@ -25,20 +25,45 @@ const db = getFirestore(app);
 
 const CLASSES = ["ପ୍ରଥମ ଶ୍ରେଣୀ", "ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ", "ତୃତୀୟ ଶ୍ରେଣୀ", "ଚତୁର୍ଥ ଶ୍ରେଣୀ", "ପଞ୍ଚମ ଶ୍ରେଣୀ", "ଷଷ୍ଠ ଶ୍ରେଣୀ", "ସପ୍ତମ ଶ୍ରେଣୀ", "ଅଷ୍ଟମ ଶ୍ରେଣୀ", "ନବମ ଶ୍ରେଣୀ", "ଦଶମ ଶ୍ରେଣୀ"];
 
-// Global State Memory (for fast searching & filtering)
+// Global State Memory
 let globalMergedData = {};
+let liveClassCovers = {};
+let allGithubImages = [];
 
 // ==========================================
 // 3. UI ELEMENTS & EVENT LISTENERS
 // ==========================================
 const loginSection = document.getElementById('login-section');
 const dashboardSection = document.getElementById('dashboard-section');
-const contentGrid = document.getElementById('content-grid');
 const systemStatus = document.getElementById('systemStatus');
 
-// Search & Filter
-document.getElementById('searchInput').addEventListener('input', renderGrid);
-document.getElementById('classFilter').addEventListener('change', renderGrid);
+// Tab Navigation Logic
+const tabMaterialsBtn = document.getElementById('tabMaterialsBtn');
+const tabClassesBtn = document.getElementById('tabClassesBtn');
+const materialsView = document.getElementById('materialsView');
+const classCoversView = document.getElementById('classCoversView');
+
+tabMaterialsBtn.addEventListener('click', () => {
+    tabMaterialsBtn.classList.add('active');
+    tabClassesBtn.classList.remove('active');
+    materialsView.classList.add('active');
+    materialsView.classList.remove('hidden');
+    classCoversView.classList.remove('active');
+    classCoversView.classList.add('hidden');
+});
+
+tabClassesBtn.addEventListener('click', () => {
+    tabClassesBtn.classList.add('active');
+    tabMaterialsBtn.classList.remove('active');
+    classCoversView.classList.add('active');
+    classCoversView.classList.remove('hidden');
+    materialsView.classList.remove('active');
+    materialsView.classList.add('hidden');
+});
+
+// Search & Filter (Materials Tab)
+document.getElementById('searchInput').addEventListener('input', renderMaterialGrid);
+document.getElementById('classFilter').addEventListener('change', renderMaterialGrid);
 document.getElementById('refreshBtn').addEventListener('click', loadDashboard);
 
 // ==========================================
@@ -77,7 +102,7 @@ async function loadDashboard() {
     systemStatus.style.color = "var(--text-main)";
     
     try {
-        // Step A: Fetch Live Data from Firebase
+        // Step A: Fetch Live Material Data
         const liveData = {};
         for (const cls of CLASSES) {
             const docSnap = await getDoc(doc(db, "Curriculum", cls));
@@ -91,8 +116,14 @@ async function loadDashboard() {
             }
         }
 
-        // Step B: Fetch Available Files from GitHub
+        // Step B: Fetch Live Class Cover Data
+        const classCoversSnap = await getDoc(doc(db, "Admin", "ClassCovers"));
+        liveClassCovers = classCoversSnap.exists() ? classCoversSnap.data() : {};
+
+        // Step C: Fetch Available Files from GitHub
         const githubData = {};
+        allGithubImages = []; // Reset image list
+        
         const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/materials`);
         const files = await res.json();
 
@@ -101,6 +132,12 @@ async function loadDashboard() {
                 const url = `https://${GITHUB_OWNER}.github.io/${GITHUB_REPO}/${file.path}`;
                 let subjectName = "";
 
+                // Store all images for the Class Cover dropdown
+                if (file.name.endsWith('.jpg') || file.name.endsWith('.png') || file.name.endsWith('.jpeg')) {
+                    allGithubImages.push({ name: file.name, url: url });
+                }
+
+                // Process specific Subject Files
                 if (file.name.endsWith('.pdf')) {
                     subjectName = file.name.replace('.pdf', '');
                     if(!githubData[subjectName]) githubData[subjectName] = {};
@@ -113,10 +150,10 @@ async function loadDashboard() {
             });
         }
 
-        // Step C: Merge them together into Global State
+        // Step D: Merge Materials into Global State
         globalMergedData = {};
         Object.keys(githubData).forEach(subject => {
-            if (githubData[subject].pdf) { // Only show subjects that have a PDF file
+            if (githubData[subject].pdf) {
                 globalMergedData[subject] = {
                     name: subject,
                     pdfUrl: githubData[subject].pdf,
@@ -130,7 +167,9 @@ async function loadDashboard() {
         systemStatus.innerHTML = "<i class='bx bx-check-circle'></i> Systems synced. Ready for deployment.";
         systemStatus.style.color = "var(--success)";
         
-        renderGrid(); // Draw the UI
+        // Draw Both UI Views
+        renderMaterialGrid(); 
+        renderClassCoversGrid();
 
     } catch (error) {
         console.error(error);
@@ -140,9 +179,10 @@ async function loadDashboard() {
 }
 
 // ==========================================
-// 6. RENDER GRID, SEARCH, & STATS
+// 6. RENDER MATERIAL GRID & STATS (TAB 1)
 // ==========================================
-function renderGrid() {
+function renderMaterialGrid() {
+    const contentGrid = document.getElementById('content-grid');
     contentGrid.innerHTML = '';
     const searchQuery = document.getElementById('searchInput').value.toLowerCase();
     const classFilter = document.getElementById('classFilter').value;
@@ -156,26 +196,23 @@ function renderGrid() {
         if (item.isLive) liveCount++;
         else offlineCount++;
 
-        // Apply Search and Filter logic
         const matchesSearch = item.name.toLowerCase().includes(searchQuery);
         const matchesClass = classFilter === "ALL" || item.currentClass === classFilter;
 
         if (matchesSearch && matchesClass) {
-            createCardHTML(item);
+            createMaterialCardHTML(item, contentGrid);
         }
     });
 
-    // Update Analytics Board
     document.getElementById('statLiveCount').innerText = liveCount;
     document.getElementById('statOfflineCount').innerText = offlineCount;
     document.getElementById('statTotalCount').innerText = totalCount;
 }
 
-function createCardHTML(item) {
+function createMaterialCardHTML(item, container) {
     const card = document.createElement('div');
     card.className = 'subject-card';
 
-    // Dropdown options
     let optionsHtml = `<option value="" disabled ${!item.isLive ? 'selected' : ''}>-- Assign a Class --</option>`;
     CLASSES.forEach(cls => {
         const selected = (cls === item.currentClass) ? 'selected' : '';
@@ -187,8 +224,8 @@ function createCardHTML(item) {
         : `<div class="status-badge status-offline"><i class='bx bx-archive-in'></i> OFFLINE</div>`;
 
     const button = item.isLive
-        ? `<button class="btn-offline" onclick="takeOffline('${item.name}', '${item.currentClass}')"><i class='bx bx-cloud-download'></i> Take Offline</button>`
-        : `<button class="btn-publish" onclick="publishLive('${item.name}', '${item.pdfUrl}', '${item.imgUrl}')"><i class='bx bx-cloud-upload'></i> Publish Live</button>`;
+        ? `<button class="btn-offline" onclick="takeMaterialOffline('${item.name}', '${item.currentClass}')"><i class='bx bx-cloud-download'></i> Take Offline</button>`
+        : `<button class="btn-publish" onclick="publishMaterialLive('${item.name}', '${item.pdfUrl}', '${item.imgUrl}')"><i class='bx bx-cloud-upload'></i> Publish Live</button>`;
 
     card.innerHTML = `
         <div class="card-image-container">
@@ -203,13 +240,58 @@ function createCardHTML(item) {
             ${button}
         </div>
     `;
-    contentGrid.appendChild(card);
+    container.appendChild(card);
 }
 
 // ==========================================
-// 7. PUBLISH / OFFLINE ACTIONS
+// 7. RENDER CLASS COVERS GRID (TAB 2)
 // ==========================================
-window.publishLive = async (subjectName, pdfUrl, imgUrl) => {
+function renderClassCoversGrid() {
+    const classGrid = document.getElementById('class-covers-grid');
+    classGrid.innerHTML = '';
+
+    // Generate dropdown options from GitHub images
+    let imageOptionsHtml = `<option value="" disabled selected>-- Select an Image --</option>`;
+    allGithubImages.forEach(img => {
+        imageOptionsHtml += `<option value="${img.url}">${img.name}</option>`;
+    });
+
+    CLASSES.forEach(cls => {
+        const isLive = liveClassCovers[cls] !== undefined;
+        const imgUrl = isLive ? liveClassCovers[cls] : "https://via.placeholder.com/400x600?text=No+Cover";
+        
+        const card = document.createElement('div');
+        card.className = 'subject-card';
+
+        const badge = isLive 
+            ? `<div class="status-badge status-live"><i class='bx bx-broadcast'></i> LIVE</div>` 
+            : `<div class="status-badge status-offline"><i class='bx bx-archive-in'></i> NOT SET</div>`;
+
+        const button = isLive
+            ? `<button class="btn-offline" onclick="removeClassCover('${cls}')"><i class='bx bx-cloud-download'></i> Remove Cover</button>`
+            : `<button class="btn-publish" onclick="publishClassCover('${cls}')"><i class='bx bx-cloud-upload'></i> Set Cover</button>`;
+
+        card.innerHTML = `
+            <div class="card-image-container">
+                <img src="${imgUrl}" alt="${cls}">
+                ${badge}
+            </div>
+            <div class="card-content">
+                <div class="card-title">${cls}</div>
+                <select id="coverSelect-${cls}" class="card-select" ${isLive ? 'disabled' : ''}>
+                    ${imageOptionsHtml}
+                </select>
+                ${button}
+            </div>
+        `;
+        classGrid.appendChild(card);
+    });
+}
+
+// ==========================================
+// 8. ACTIONS: MATERIAL PUBLISH / OFFLINE
+// ==========================================
+window.publishMaterialLive = async (subjectName, pdfUrl, imgUrl) => {
     const classSelect = document.getElementById(`select-${subjectName}`);
     const selectedClass = classSelect.value;
 
@@ -234,15 +316,15 @@ window.publishLive = async (subjectName, pdfUrl, imgUrl) => {
             } else throw e;
         });
         
-        showToast(`"${subjectName}" is now live in the app!`, "success");
-        loadDashboard(); // Refresh UI
+        showToast(`"${subjectName}" is now live!`, "success");
+        loadDashboard(); 
     } catch (e) {
         showToast("Publish failed. Check permissions.", "error");
     }
 }
 
-window.takeOffline = async (subjectName, currentClass) => {
-    if(confirm(`Are you sure you want to remove "${subjectName}" from the app? Students will lose access.`)) {
+window.takeMaterialOffline = async (subjectName, currentClass) => {
+    if(confirm(`Remove "${subjectName}" from the app?`)) {
         try {
             await updateDoc(doc(db, "Curriculum", currentClass), {
                 subjects: arrayRemove(subjectName),
@@ -250,7 +332,7 @@ window.takeOffline = async (subjectName, currentClass) => {
                 [`image_links.${subjectName}`]: deleteField()
             });
             showToast(`"${subjectName}" taken offline.`, "error");
-            loadDashboard(); // Refresh UI
+            loadDashboard(); 
         } catch (e) {
             showToast("Failed to take offline.", "error");
         }
@@ -258,7 +340,46 @@ window.takeOffline = async (subjectName, currentClass) => {
 }
 
 // ==========================================
-// 8. TOAST NOTIFICATION SYSTEM
+// 9. ACTIONS: CLASS COVER PUBLISH / OFFLINE
+// ==========================================
+window.publishClassCover = async (className) => {
+    const selectBox = document.getElementById(`coverSelect-${className}`);
+    const imgUrl = selectBox.value;
+
+    if(!imgUrl) {
+        showToast("Please select an image from the dropdown.", "error");
+        return;
+    }
+
+    try {
+        // We use setDoc with { merge: true } so we don't accidentally delete other class covers
+        await setDoc(doc(db, "Admin", "ClassCovers"), {
+            [className]: imgUrl
+        }, { merge: true });
+        
+        showToast(`${className} cover updated!`, "success");
+        loadDashboard();
+    } catch (e) {
+        showToast("Failed to set class cover.", "error");
+    }
+}
+
+window.removeClassCover = async (className) => {
+    if(confirm(`Remove the cover image for ${className}? It will turn grey in the app.`)) {
+        try {
+            await updateDoc(doc(db, "Admin", "ClassCovers"), {
+                [className]: deleteField()
+            });
+            showToast(`Cover removed for ${className}.`, "error");
+            loadDashboard();
+        } catch (e) {
+            showToast("Failed to remove cover.", "error");
+        }
+    }
+}
+
+// ==========================================
+// 10. TOAST NOTIFICATION SYSTEM
 // ==========================================
 function showToast(message, type) {
     const container = document.getElementById('toast-container');
@@ -270,9 +391,8 @@ function showToast(message, type) {
     toast.innerHTML = `${icon} <span>${message}</span>`;
     container.appendChild(toast);
 
-    // Remove toast smoothly after 4 seconds
     setTimeout(() => {
         toast.classList.add('fade-out');
-        setTimeout(() => toast.remove(), 400); // Wait for fade out animation
+        setTimeout(() => toast.remove(), 400); 
     }, 4000);
 }
