@@ -1,138 +1,278 @@
-// 1. FIREBASE IMPORTS (Notice we added arrayRemove and deleteField for the Offline button)
+// ==========================================
+// 1. FIREBASE IMPORTS
+// ==========================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getFirestore, doc, updateDoc, setDoc, arrayUnion, arrayRemove, deleteField, getDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-// 2. YOUR CONFIGURATIONS
+// ==========================================
+// 2. CONFIGURATIONS
+// ==========================================
 const firebaseConfig = {
-  apiKey: "AIzaSyDOX3ciualcuFxI5wt8Z14Zv3g_sjWUOGI",
-  authDomain: "odia-learning-platform-d4a8e.firebaseapp.com",
-  projectId: "odia-learning-platform-d4a8e",
-  storageBucket: "odia-learning-platform-d4a8e.firebasestorage.app",
-  messagingSenderId: "961301102290",
-  appId: "1:961301102290:web:e638784217b07582e0770b",
-  measurementId: "G-R0RRLPMQ1P"
+    apiKey: "AIzaSyDOX3ciualcuFxI5wt8Z14Zv3g_sjWUOGI",
+    authDomain: "odia-learning-platform-d4a8e.firebaseapp.com",
+    projectId: "odia-learning-platform-d4a8e",
+    storageBucket: "odia-learning-platform-d4a8e.firebasestorage.app",
+    messagingSenderId: "961301102290",
+    appId: "1:961301102290:web:e638784217b07582e0770b",
+    measurementId: "G-R0RRLPMQ1P"
 };
 
-// Your exact GitHub details for the auto-scanner
 const GITHUB_OWNER = "ExcellentInstitute"; 
-const GITHUB_REPO = "excellent-curriculum-manager"; 
+const GITHUB_REPO = "excellent-curriculum-manager";
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// 3. UI ELEMENTS
+const CLASSES = ["ପ୍ରଥମ ଶ୍ରେଣୀ", "ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ", "ତୃତୀୟ ଶ୍ରେଣୀ", "ଚତୁର୍ଥ ଶ୍ରେଣୀ", "ପଞ୍ଚମ ଶ୍ରେଣୀ", "ଷଷ୍ଠ ଶ୍ରେଣୀ", "ସପ୍ତମ ଶ୍ରେଣୀ", "ଅଷ୍ଟମ ଶ୍ରେଣୀ", "ନବମ ଶ୍ରେଣୀ", "ଦଶମ ଶ୍ରେଣୀ"];
+
+// Global State Memory (for fast searching & filtering)
+let globalMergedData = {};
+
+// ==========================================
+// 3. UI ELEMENTS & EVENT LISTENERS
+// ==========================================
 const loginSection = document.getElementById('login-section');
 const dashboardSection = document.getElementById('dashboard-section');
-const passInput = document.getElementById('passInput');
-const loginError = document.getElementById('loginError');
-const uploadStatus = document.getElementById('uploadStatus');
+const contentGrid = document.getElementById('content-grid');
+const systemStatus = document.getElementById('systemStatus');
 
-// 4. SECURE FIREBASE LOGIN
+// Search & Filter
+document.getElementById('searchInput').addEventListener('input', renderGrid);
+document.getElementById('classFilter').addEventListener('change', renderGrid);
+document.getElementById('refreshBtn').addEventListener('click', loadDashboard);
+
+// ==========================================
+// 4. SECURE LOGIN
+// ==========================================
 document.getElementById('loginBtn').addEventListener('click', async () => {
-    const enteredPass = passInput.value.trim();
-    if (!enteredPass) return;
+    const pass = document.getElementById('passInput').value.trim();
+    if (!pass) return;
+
+    const btn = document.getElementById('loginBtn');
+    btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Verifying...`;
 
     try {
-        const securityDocRef = doc(db, "Admin", "Settings");
-        const securityDoc = await getDoc(securityDocRef);
-
-        if (securityDoc.exists() && securityDoc.data().passcode === enteredPass) {
+        const docSnap = await getDoc(doc(db, "Admin", "Settings"));
+        if (docSnap.exists() && docSnap.data().passcode === pass) {
             loginSection.classList.add('hidden');
             dashboardSection.classList.remove('hidden');
-            scanGitHubRepository(); // Trigger the scanner once logged in!
+            loadDashboard(); // Start scanning the repo!
         } else {
-            loginError.innerText = "Incorrect passcode.";
+            document.getElementById('loginError').innerText = "Incorrect passcode.";
+            btn.innerHTML = `Unlock System <i class='bx bx-right-arrow-alt'></i>`;
         }
-    } catch (error) {
-        loginError.innerText = "Database error. Check config.";
+    } catch (e) {
+        document.getElementById('loginError').innerText = "Database connection error.";
+        btn.innerHTML = `Unlock System <i class='bx bx-right-arrow-alt'></i>`;
     }
 });
 
-document.getElementById('logoutBtn').addEventListener('click', () => {
-    dashboardSection.classList.add('hidden');
-    loginSection.classList.remove('hidden');
-});
+document.getElementById('logoutBtn').addEventListener('click', () => window.location.reload());
 
-// 5. GITHUB AUTO-SCANNER
-async function scanGitHubRepository() {
-    const imageSelect = document.getElementById('imageSelect');
-    const materialSelect = document.getElementById('materialSelect');
+// ==========================================
+// 5. CORE ENGINE: SCAN & MERGE DATA
+// ==========================================
+async function loadDashboard() {
+    systemStatus.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Scanning GitHub and syncing with Firebase...";
+    systemStatus.style.color = "var(--text-main)";
     
-    imageSelect.innerHTML = '<option value="">Select an image...</option>';
-    materialSelect.innerHTML = '<option value="">Select a material file...</option>';
-
     try {
-        // Ping the GitHub API to see what's in the materials folder
-        const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/materials`);
-        const files = await response.json();
+        // Step A: Fetch Live Data from Firebase
+        const liveData = {};
+        for (const cls of CLASSES) {
+            const docSnap = await getDoc(doc(db, "Curriculum", cls));
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (data.subjects) {
+                    data.subjects.forEach(sub => {
+                        liveData[sub] = { class: cls, pdf: data.pdf_links[sub], img: data.image_links[sub] };
+                    });
+                }
+            }
+        }
 
-        files.forEach(file => {
-            // Generate the live GitHub Pages link for this file
-            const liveLink = `https://${GITHUB_OWNER}.github.io/${GITHUB_REPO}/${file.path}`;
-            const optionHTML = `<option value="${liveLink}">${file.name}</option>`;
+        // Step B: Fetch Available Files from GitHub
+        const githubData = {};
+        const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/materials`);
+        const files = await res.json();
 
-            // Sort files into the right dropdowns based on extension
-            if (file.name.endsWith('.jpg') || file.name.endsWith('.png') || file.name.endsWith('.jpeg')) {
-                imageSelect.innerHTML += optionHTML;
-            } else if (file.name.endsWith('.pdf') || file.name.endsWith('.html')) {
-                materialSelect.innerHTML += optionHTML;
+        if (Array.isArray(files)) {
+            files.forEach(file => {
+                const url = `https://${GITHUB_OWNER}.github.io/${GITHUB_REPO}/${file.path}`;
+                let subjectName = "";
+
+                if (file.name.endsWith('.pdf')) {
+                    subjectName = file.name.replace('.pdf', '');
+                    if(!githubData[subjectName]) githubData[subjectName] = {};
+                    githubData[subjectName].pdf = url;
+                } else if (file.name.includes('-cover')) {
+                    subjectName = file.name.split('-cover')[0];
+                    if(!githubData[subjectName]) githubData[subjectName] = {};
+                    githubData[subjectName].img = url;
+                }
+            });
+        }
+
+        // Step C: Merge them together into Global State
+        globalMergedData = {};
+        Object.keys(githubData).forEach(subject => {
+            if (githubData[subject].pdf) { // Only show subjects that have a PDF file
+                globalMergedData[subject] = {
+                    name: subject,
+                    pdfUrl: githubData[subject].pdf,
+                    imgUrl: githubData[subject].img || "https://via.placeholder.com/400x600?text=No+Cover",
+                    isLive: liveData[subject] !== undefined,
+                    currentClass: liveData[subject] ? liveData[subject].class : ""
+                };
             }
         });
+
+        systemStatus.innerHTML = "<i class='bx bx-check-circle'></i> Systems synced. Ready for deployment.";
+        systemStatus.style.color = "var(--success)";
+        
+        renderGrid(); // Draw the UI
+
     } catch (error) {
-        uploadStatus.innerText = "Failed to scan GitHub repository.";
+        console.error(error);
+        systemStatus.innerHTML = "<i class='bx bx-error-circle'></i> Network error. Could not scan repository.";
+        systemStatus.style.color = "var(--error)";
     }
 }
 
-// 6. PUBLISH LIVE LOGIC
-document.getElementById('uploadBtn').addEventListener('click', async () => {
-    const className = document.getElementById('classSelect').value;
-    const subjectName = document.getElementById('subjectName').value.trim();
-    const imageUrl = document.getElementById('imageSelect').value;
-    const materialUrl = document.getElementById('materialSelect').value;
+// ==========================================
+// 6. RENDER GRID, SEARCH, & STATS
+// ==========================================
+function renderGrid() {
+    contentGrid.innerHTML = '';
+    const searchQuery = document.getElementById('searchInput').value.toLowerCase();
+    const classFilter = document.getElementById('classFilter').value;
 
-    if (!subjectName || !imageUrl || !materialUrl) {
-        uploadStatus.innerText = "Error: Select subject, image, and material.";
+    let liveCount = 0;
+    let offlineCount = 0;
+    let totalCount = 0;
+
+    Object.values(globalMergedData).forEach(item => {
+        totalCount++;
+        if (item.isLive) liveCount++;
+        else offlineCount++;
+
+        // Apply Search and Filter logic
+        const matchesSearch = item.name.toLowerCase().includes(searchQuery);
+        const matchesClass = classFilter === "ALL" || item.currentClass === classFilter;
+
+        if (matchesSearch && matchesClass) {
+            createCardHTML(item);
+        }
+    });
+
+    // Update Analytics Board
+    document.getElementById('statLiveCount').innerText = liveCount;
+    document.getElementById('statOfflineCount').innerText = offlineCount;
+    document.getElementById('statTotalCount').innerText = totalCount;
+}
+
+function createCardHTML(item) {
+    const card = document.createElement('div');
+    card.className = 'subject-card';
+
+    // Dropdown options
+    let optionsHtml = `<option value="" disabled ${!item.isLive ? 'selected' : ''}>-- Assign a Class --</option>`;
+    CLASSES.forEach(cls => {
+        const selected = (cls === item.currentClass) ? 'selected' : '';
+        optionsHtml += `<option value="${cls}" ${selected}>${cls}</option>`;
+    });
+
+    const badge = item.isLive 
+        ? `<div class="status-badge status-live"><i class='bx bx-broadcast'></i> LIVE IN APP</div>` 
+        : `<div class="status-badge status-offline"><i class='bx bx-archive-in'></i> OFFLINE</div>`;
+
+    const button = item.isLive
+        ? `<button class="btn-offline" onclick="takeOffline('${item.name}', '${item.currentClass}')"><i class='bx bx-cloud-download'></i> Take Offline</button>`
+        : `<button class="btn-publish" onclick="publishLive('${item.name}', '${item.pdfUrl}', '${item.imgUrl}')"><i class='bx bx-cloud-upload'></i> Publish Live</button>`;
+
+    card.innerHTML = `
+        <div class="card-image-container">
+            <img src="${item.imgUrl}" alt="${item.name}">
+            ${badge}
+        </div>
+        <div class="card-content">
+            <div class="card-title">${item.name}</div>
+            <select id="select-${item.name}" class="card-select" ${item.isLive ? 'disabled' : ''}>
+                ${optionsHtml}
+            </select>
+            ${button}
+        </div>
+    `;
+    contentGrid.appendChild(card);
+}
+
+// ==========================================
+// 7. PUBLISH / OFFLINE ACTIONS
+// ==========================================
+window.publishLive = async (subjectName, pdfUrl, imgUrl) => {
+    const classSelect = document.getElementById(`select-${subjectName}`);
+    const selectedClass = classSelect.value;
+
+    if(!selectedClass) {
+        showToast("Select a class before publishing!", "error");
         return;
     }
 
     try {
-        const classDocRef = doc(db, "Curriculum", className);
-        await updateDoc(classDocRef, {
+        const docRef = doc(db, "Curriculum", selectedClass);
+        await updateDoc(docRef, {
             subjects: arrayUnion(subjectName),
-            [`pdf_links.${subjectName}`]: materialUrl,
-            [`image_links.${subjectName}`]: imageUrl
+            [`pdf_links.${subjectName}`]: pdfUrl,
+            [`image_links.${subjectName}`]: imgUrl
+        }).catch(async (e) => {
+            if(e.code === 'not-found') {
+                await setDoc(docRef, {
+                    subjects: [subjectName],
+                    pdf_links: { [subjectName]: pdfUrl },
+                    image_links: { [subjectName]: imgUrl }
+                });
+            } else throw e;
         });
-        uploadStatus.style.color = "var(--success)";
-        uploadStatus.innerText = `✅ "${subjectName}" is LIVE on all devices.`;
-    } catch (error) {
-        uploadStatus.style.color = "var(--error)";
-        uploadStatus.innerText = "Failed to publish. Check database rules.";
+        
+        showToast(`"${subjectName}" is now live in the app!`, "success");
+        loadDashboard(); // Refresh UI
+    } catch (e) {
+        showToast("Publish failed. Check permissions.", "error");
     }
-});
+}
 
-// 7. TAKE OFFLINE LOGIC
-document.getElementById('offlineBtn').addEventListener('click', async () => {
-    const className = document.getElementById('classSelect').value;
-    const subjectName = document.getElementById('subjectName').value.trim();
-
-    if (!subjectName) {
-        uploadStatus.innerText = "Type the Subject Name you want to take offline.";
-        return;
-    }
-
-    if(confirm(`Are you sure you want to remove ${subjectName} from the app?`)) {
+window.takeOffline = async (subjectName, currentClass) => {
+    if(confirm(`Are you sure you want to remove "${subjectName}" from the app? Students will lose access.`)) {
         try {
-            const classDocRef = doc(db, "Curriculum", className);
-            // Remove the subject from the array, and delete its links from the maps
-            await updateDoc(classDocRef, {
+            await updateDoc(doc(db, "Curriculum", currentClass), {
                 subjects: arrayRemove(subjectName),
                 [`pdf_links.${subjectName}`]: deleteField(),
                 [`image_links.${subjectName}`]: deleteField()
             });
-            uploadStatus.style.color = "var(--error)";
-            uploadStatus.innerText = `🛑 "${subjectName}" has been taken OFFLINE.`;
-        } catch (error) {
-            uploadStatus.innerText = "Failed to take offline.";
+            showToast(`"${subjectName}" taken offline.`, "error");
+            loadDashboard(); // Refresh UI
+        } catch (e) {
+            showToast("Failed to take offline.", "error");
         }
     }
-});
+}
+
+// ==========================================
+// 8. TOAST NOTIFICATION SYSTEM
+// ==========================================
+function showToast(message, type) {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    const icon = type === 'success' ? "<i class='bx bxs-check-circle'></i>" : "<i class='bx bxs-error-circle'></i>";
+    
+    toast.innerHTML = `${icon} <span>${message}</span>`;
+    container.appendChild(toast);
+
+    // Remove toast smoothly after 4 seconds
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 400); // Wait for fade out animation
+    }, 4000);
+}
