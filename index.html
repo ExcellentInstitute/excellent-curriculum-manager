@@ -4,13 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Excellent Institute | Admin Workspace</title>
-    <!-- Premium Google Font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- SECURE LOGIN SCREEN -->
     <div id="login-section" class="screen-container">
         <div class="auth-card">
             <div class="brand-header">
@@ -18,7 +16,6 @@
                 <h2>Excellent Institute</h2>
                 <p>Command Center Access</p>
             </div>
-            
             <div class="input-group">
                 <input type="password" id="passInput" placeholder="Enter Secure Passcode">
             </div>
@@ -27,7 +24,6 @@
         </div>
     </div>
 
-    <!-- MAIN DASHBOARD (Hidden by default) -->
     <div id="dashboard-section" class="screen-container hidden">
         <header class="top-nav">
             <div class="nav-brand">
@@ -40,8 +36,8 @@
         <main class="dashboard-content">
             <div class="upload-card">
                 <div class="card-header">
-                    <h2>Deploy Study Material</h2>
-                    <p>Content published here goes live to all student devices across Odisha instantly.</p>
+                    <h2>Content Manager</h2>
+                    <p>Repository auto-scanned. Select files to push live or pull offline.</p>
                 </div>
 
                 <div class="form-grid">
@@ -50,44 +46,38 @@
                         <select id="classSelect" class="form-control">
                             <option value="ପ୍ରଥମ ଶ୍ରେଣୀ">ପ୍ରଥମ ଶ୍ରେଣୀ (Class 1)</option>
                             <option value="ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ">ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ (Class 2)</option>
-                            <option value="ତୃତୀୟ ଶ୍ରେଣୀ">ତୃତୀୟ ଶ୍ରେଣୀ (Class 3)</option>
-                            <option value="ଚତୁର୍ଥ ଶ୍ରେଣୀ">ଚତୁର୍ଥ ଶ୍ରେଣୀ (Class 4)</option>
-                            <option value="ପଞ୍ଚମ ଶ୍ରେଣୀ">ପଞ୍ଚମ ଶ୍ରେଣୀ (Class 5)</option>
-                            <option value="ଷଷ୍ଠ ଶ୍ରେଣୀ">ଷଷ୍ଠ ଶ୍ରେଣୀ (Class 6)</option>
-                            <option value="ସପ୍ତମ ଶ୍ରେଣୀ">ସପ୍ତମ ଶ୍ରେଣୀ (Class 7)</option>
-                            <option value="ଅଷ୍ଟମ ଶ୍ରେଣୀ">ଅଷ୍ଟମ ଶ୍ରେଣୀ (Class 8)</option>
-                            <option value="ନବମ ଶ୍ରେଣୀ">ନବମ ଶ୍ରେଣୀ (Class 9)</option>
-                            <option value="ଦଶମ ଶ୍ରେଣୀ">ଦଶମ ଶ୍ରେଣୀ (Class 10)</option>
+                            </select>
+                    </div>
+
+                    <div class="input-group full-width">
+                        <label>Subject Name (Exact Odia Text)</label>
+                        <input type="text" id="subjectName" class="form-control" placeholder="e.g., ଗଣିତ">
+                    </div>
+
+                    <div class="input-group full-width">
+                        <label>Select Cover Image (Auto-Scanned)</label>
+                        <select id="imageSelect" class="form-control">
+                            <option value="">Scanning repository...</option>
                         </select>
                     </div>
 
                     <div class="input-group full-width">
-                        <label>Subject Name</label>
-                        <input type="text" id="subjectName" class="form-control" placeholder="e.g., ଗଣିତ (Must match exactly)">
-                    </div>
-
-                    <div class="input-group full-width">
-                        <label>Cover Image Link</label>
-                        <input type="url" id="imageUrl" class="form-control" placeholder="https://...">
-                        <span class="helper-text">Direct link to the book cover image</span>
-                    </div>
-
-                    <div class="input-group full-width">
-                        <label>Web Material Link</label>
-                        <input type="url" id="htmlUrl" class="form-control" placeholder="https://your-github.github.io/...">
-                        <span class="helper-text">The GitHub Pages HTML link for the actual notes</span>
+                        <label>Select Web Material (Auto-Scanned)</label>
+                        <select id="materialSelect" class="form-control">
+                            <option value="">Scanning repository...</option>
+                        </select>
                     </div>
                 </div>
 
-                <div class="action-footer">
-                    <button id="uploadBtn" class="btn-primary large">🚀 Publish Live</button>
-                    <p id="uploadStatus" class="status-text"></p>
+                <div class="action-footer" style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button id="uploadBtn" class="btn-primary">🚀 Publish Live</button>
+                    <button id="offlineBtn" class="btn-secondary" style="border-color: var(--error); color: var(--error);">🛑 Take Offline</button>
                 </div>
+                <p id="uploadStatus" class="status-text"></p>
             </div>
         </main>
     </div>
 
-    <!-- The Logic Engine -->
     <script type="module" src="app.js"></script>
 </body>
 </html>
