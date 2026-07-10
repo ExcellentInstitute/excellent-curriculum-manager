@@ -39,7 +39,7 @@
                 <div class="brand-logo small"><i class='bx bxs-graduation'></i></div>
                 <div>
                     <h3>Command Center</h3>
-                    <span class="version-tag">Deployment Engine v2.0</span>
+                    <span class="version-tag">Deployment Engine v2.1</span>
                 </div>
             </div>
             <div class="nav-actions">
@@ -55,12 +55,7 @@
 
         <main class="dashboard-content">
             
-            <div class="tabs-container">
-                <button id="tabSubjectsBtn" class="tab-btn active"><i class='bx bx-book-open'></i> Subject Materials</button>
-                <button id="tabClassesBtn" class="tab-btn"><i class='bx bx-image'></i> Class Covers</button>
-            </div>
-
-            <section id="statsRow" class="stats-row">
+            <section class="stats-row">
                 <div class="stat-card">
                     <div class="stat-icon live-icon"><i class='bx bx-broadcast'></i></div>
                     <div class="stat-info">
@@ -84,39 +79,55 @@
                 </div>
             </section>
 
-            <section id="controlsRow" class="controls-row">
-                <div class="search-box">
-                    <i class='bx bx-search'></i>
-                    <input type="text" id="searchInput" placeholder="Search subjects (e.g., ଗଣିତ)...">
-                </div>
-                <div class="filter-box">
-                    <i class='bx bx-filter'></i>
-                    <select id="classFilter">
-                        <option value="ALL">All Classes</option>
-                        <option value="ପ୍ରଥମ ଶ୍ରେଣୀ">ପ୍ରଥମ ଶ୍ରେଣୀ (Class 1)</option>
-                        <option value="ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ">ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ (Class 2)</option>
-                        <option value="ତୃତୀୟ ଶ୍ରେଣୀ">ତୃତୀୟ ଶ୍ରେଣୀ (Class 3)</option>
-                        <option value="ଚତୁର୍ଥ ଶ୍ରେଣୀ">ଚତୁର୍ଥ ଶ୍ରେଣୀ (Class 4)</option>
-                        <option value="ପଞ୍ଚମ ଶ୍ରେଣୀ">ପଞ୍ଚମ ଶ୍ରେଣୀ (Class 5)</option>
-                        <option value="ଷଷ୍ଠ ଶ୍ରେଣୀ">ଷଷ୍ଠ ଶ୍ରେଣୀ (Class 6)</option>
-                        <option value="ସପ୍ତମ ଶ୍ରେଣୀ">ସପ୍ତମ ଶ୍ରେଣୀ (Class 7)</option>
-                        <option value="ଅଷ୍ଟମ ଶ୍ରେଣୀ">ଅଷ୍ଟମ ଶ୍ରେଣୀ (Class 8)</option>
-                        <option value="ନବମ ଶ୍ରେଣୀ">ନବମ ଶ୍ରେଣୀ (Class 9)</option>
-                        <option value="ଦଶମ ଶ୍ରେଣୀ">ଦଶମ ଶ୍ରେଣୀ (Class 10)</option>
-                    </select>
-                </div>
-                <button id="refreshBtn" class="btn-secondary">
-                    <i class='bx bx-refresh'></i> Sync Repo
-                </button>
-            </section>
-
-            <div id="systemStatus" class="status-indicator">
-                <i class='bx bx-loader-alt bx-spin'></i> Initializing Command Center...
+            <div class="tab-navigation">
+                <button id="tabMaterialsBtn" class="tab-btn active"><i class='bx bx-book-open'></i> Manage Subjects</button>
+                <button id="tabClassesBtn" class="tab-btn"><i class='bx bx-image-alt'></i> Manage Class Covers</button>
             </div>
 
-            <section id="content-grid" class="content-grid"></section>
+            <div id="materialsView" class="view-section active">
+                <section class="controls-row">
+                    <div class="search-box">
+                        <i class='bx bx-search'></i>
+                        <input type="text" id="searchInput" placeholder="Search subjects (e.g., ଗଣିତ)...">
+                    </div>
+                    <div class="filter-box">
+                        <i class='bx bx-filter'></i>
+                        <select id="classFilter">
+                            <option value="ALL">All Classes</option>
+                            <option value="ପ୍ରଥମ ଶ୍ରେଣୀ">ପ୍ରଥମ ଶ୍ରେଣୀ (Class 1)</option>
+                            <option value="ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ">ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ (Class 2)</option>
+                            <option value="ତୃତୀୟ ଶ୍ରେଣୀ">ତୃତୀୟ ଶ୍ରେଣୀ (Class 3)</option>
+                            <option value="ଚତୁର୍ଥ ଶ୍ରେଣୀ">ଚତୁର୍ଥ ଶ୍ରେଣୀ (Class 4)</option>
+                            <option value="ପଞ୍ଚମ ଶ୍ରେଣୀ">ପଞ୍ଚମ ଶ୍ରେଣୀ (Class 5)</option>
+                            <option value="ଷଷ୍ଠ ଶ୍ରେଣୀ">ଷଷ୍ଠ ଶ୍ରେଣୀ (Class 6)</option>
+                            <option value="ସପ୍ତମ ଶ୍ରେଣୀ">ସପ୍ତମ ଶ୍ରେଣୀ (Class 7)</option>
+                            <option value="ଅଷ୍ଟମ ଶ୍ରେଣୀ">ଅଷ୍ଟମ ଶ୍ରେଣୀ (Class 8)</option>
+                            <option value="ନବମ ଶ୍ରେଣୀ">ନବମ ଶ୍ରେଣୀ (Class 9)</option>
+                            <option value="ଦଶମ ଶ୍ରେଣୀ">ଦଶମ ଶ୍ରେଣୀ (Class 10)</option>
+                        </select>
+                    </div>
+                    <button id="refreshBtn" class="btn-secondary">
+                        <i class='bx bx-refresh'></i> Sync Repo
+                    </button>
+                </section>
 
-            <section id="class-grid" class="content-grid hidden"></section>
+                <div id="systemStatus" class="status-indicator">
+                    <i class='bx bx-loader-alt bx-spin'></i> Initializing Command Center...
+                </div>
+
+                <section id="content-grid" class="content-grid">
+                    </section>
+            </div>
+
+            <div id="classCoversView" class="view-section hidden">
+                <div class="section-header" style="margin-bottom: 24px;">
+                    <h2 style="font-size: 20px; color: var(--text-main);">Class Cover Manager</h2>
+                    <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Assign repository images to customize the Android home screen.</p>
+                </div>
+                
+                <section id="class-covers-grid" class="content-grid">
+                    </section>
+            </div>
 
         </main>
     </div>
