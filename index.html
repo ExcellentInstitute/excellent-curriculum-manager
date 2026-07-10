@@ -34,47 +34,14 @@
         </header>
 
         <main class="dashboard-content">
-            <div class="upload-card">
-                <div class="card-header">
-                    <h2>Content Manager</h2>
-                    <p>Repository auto-scanned. Select files to push live or pull offline.</p>
-                </div>
-
-                <div class="form-grid">
-                    <div class="input-group full-width">
-                        <label>Target Class</label>
-                        <select id="classSelect" class="form-control">
-                            <option value="ପ୍ରଥମ ଶ୍ରେଣୀ">ପ୍ରଥମ ଶ୍ରେଣୀ (Class 1)</option>
-                            <option value="ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ">ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ (Class 2)</option>
-                            </select>
-                    </div>
-
-                    <div class="input-group full-width">
-                        <label>Subject Name (Exact Odia Text)</label>
-                        <input type="text" id="subjectName" class="form-control" placeholder="e.g., ଗଣିତ">
-                    </div>
-
-                    <div class="input-group full-width">
-                        <label>Select Cover Image (Auto-Scanned)</label>
-                        <select id="imageSelect" class="form-control">
-                            <option value="">Scanning repository...</option>
-                        </select>
-                    </div>
-
-                    <div class="input-group full-width">
-                        <label>Select Web Material (Auto-Scanned)</label>
-                        <select id="materialSelect" class="form-control">
-                            <option value="">Scanning repository...</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="action-footer" style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button id="uploadBtn" class="btn-primary">🚀 Publish Live</button>
-                    <button id="offlineBtn" class="btn-secondary" style="border-color: var(--error); color: var(--error);">🛑 Take Offline</button>
-                </div>
-                <p id="uploadStatus" class="status-text"></p>
+            <div class="dashboard-header">
+                <h2>Content Manager</h2>
+                <p>Repository auto-scanned. Assign a class and click Publish to send to all student devices.</p>
+                <p id="systemStatus" class="status-text" style="text-align: left; margin-top: 10px;"></p>
             </div>
+
+            <div id="content-grid" class="content-grid">
+                </div>
         </main>
     </div>
 
