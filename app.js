@@ -81,7 +81,7 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
         if (docSnap.exists() && docSnap.data().passcode === pass) {
             loginSection.classList.add('hidden');
             dashboardSection.classList.remove('hidden');
-            loadDashboard(); // Start scanning the repo!
+            loadDashboard();
         } else {
             document.getElementById('loginError').innerText = "Incorrect passcode.";
             btn.innerHTML = `Unlock System <i class='bx bx-right-arrow-alt'></i>`;
@@ -102,7 +102,7 @@ async function loadDashboard() {
     systemStatus.style.color = "var(--text-main)";
     
     try {
-        // Step A: Fetch Live Material Data
+        // Step A: Fetch Live Material Data from Firebase
         const liveData = {};
         for (const cls of CLASSES) {
             const docSnap = await getDoc(doc(db, "Curriculum", cls));
@@ -122,7 +122,7 @@ async function loadDashboard() {
 
         // Step C: Fetch Available Files from GitHub
         const githubData = {};
-        allGithubImages = []; // Reset image list
+        allGithubImages = []; 
         
         const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/materials`);
         const files = await res.json();
@@ -132,12 +132,10 @@ async function loadDashboard() {
                 const url = `https://${GITHUB_OWNER}.github.io/${GITHUB_REPO}/${file.path}`;
                 let subjectName = "";
 
-                // Store all images for the Class Cover dropdown
                 if (file.name.endsWith('.jpg') || file.name.endsWith('.png') || file.name.endsWith('.jpeg')) {
                     allGithubImages.push({ name: file.name, url: url });
                 }
 
-                // Process specific Subject Files
                 if (file.name.endsWith('.pdf')) {
                     subjectName = file.name.replace('.pdf', '');
                     if(!githubData[subjectName]) githubData[subjectName] = {};
@@ -150,16 +148,32 @@ async function loadDashboard() {
             });
         }
 
-        // Step D: Merge Materials into Global State
+        // Step D: SMART MERGE (Decouples Display Name from File Name)
         globalMergedData = {};
-        Object.keys(githubData).forEach(subject => {
-            if (githubData[subject].pdf) {
-                globalMergedData[subject] = {
-                    name: subject,
-                    pdfUrl: githubData[subject].pdf,
-                    imgUrl: githubData[subject].img || "https://via.placeholder.com/400x600?text=No+Cover",
-                    isLive: liveData[subject] !== undefined,
-                    currentClass: liveData[subject] ? liveData[subject].class : ""
+        
+        // 1. First, load all LIVE data from Firebase (Truth source for names)
+        Object.keys(liveData).forEach(liveSubject => {
+            globalMergedData[liveSubject] = {
+                name: liveSubject,
+                pdfUrl: liveData[liveSubject].pdf,
+                imgUrl: liveData[liveSubject].img,
+                isLive: true,
+                currentClass: liveData[liveSubject].class
+            };
+        });
+
+        // 2. Then, add any UNPUBLISHED files from GitHub
+        Object.keys(githubData).forEach(gitSubject => {
+            // Check if this exact PDF URL is already published under ANY name
+            const isAlreadyLive = Object.values(liveData).some(item => item.pdf === githubData[gitSubject].pdf);
+
+            if (!isAlreadyLive && githubData[gitSubject].pdf) {
+                globalMergedData[gitSubject] = {
+                    name: gitSubject,
+                    pdfUrl: githubData[gitSubject].pdf,
+                    imgUrl: githubData[gitSubject].img || "https://via.placeholder.com/400x600?text=No+Cover",
+                    isLive: false,
+                    currentClass: ""
                 };
             }
         });
@@ -167,7 +181,6 @@ async function loadDashboard() {
         systemStatus.innerHTML = "<i class='bx bx-check-circle'></i> Systems synced. Ready for deployment.";
         systemStatus.style.color = "var(--success)";
         
-        // Draw Both UI Views
         renderMaterialGrid(); 
         renderClassCoversGrid();
 
@@ -223,9 +236,15 @@ function createMaterialCardHTML(item, container) {
         ? `<div class="status-badge status-live"><i class='bx bx-broadcast'></i> LIVE IN APP</div>` 
         : `<div class="status-badge status-offline"><i class='bx bx-archive-in'></i> OFFLINE</div>`;
 
-    const button = item.isLive
-        ? `<button class="btn-offline" onclick="takeMaterialOffline('${item.name}', '${item.currentClass}')"><i class='bx bx-cloud-download'></i> Take Offline</button>`
-        : `<button class="btn-publish" onclick="publishMaterialLive('${item.name}', '${item.pdfUrl}', '${item.imgUrl}')"><i class='bx bx-cloud-upload'></i> Publish Live</button>`;
+    const actionsHtml = item.isLive
+        ? `<button class="btn-offline" onclick="takeMaterialOffline('${item.name}', '${item.currentClass}')"><i class='bx bx-cloud-download'></i> Offline</button>`
+        : `<button class="btn-publish" onclick="publishMaterialLive('${item.name}', '${item.pdfUrl}', '${item.imgUrl}')"><i class='bx bx-cloud-upload'></i> Publish</button>`;
+
+    // New Android Preview & Rename Buttons
+    const previewBtn = `<button class="btn-preview" onclick="previewMaterial('${item.name}', '${item.imgUrl}')" title="Preview App Layout"><i class='bx bx-mobile-alt'></i></button>`;
+    const renameBtn = item.isLive 
+        ? `<button class="btn-rename" onclick="openRenameModal('${item.name}', '${item.currentClass}')" title="Rename Subject Display"><i class='bx bx-edit-alt'></i></button>` 
+        : '';
 
     card.innerHTML = `
         <div class="card-image-container">
@@ -233,11 +252,17 @@ function createMaterialCardHTML(item, container) {
             ${badge}
         </div>
         <div class="card-content">
-            <div class="card-title">${item.name}</div>
+            <div class="card-title-wrapper">
+                <div class="card-title">${item.name}</div>
+                ${renameBtn}
+            </div>
             <select id="select-${item.name}" class="card-select" ${item.isLive ? 'disabled' : ''}>
                 ${optionsHtml}
             </select>
-            ${button}
+            <div class="card-actions-row">
+                ${previewBtn}
+                ${actionsHtml}
+            </div>
         </div>
     `;
     container.appendChild(card);
@@ -250,7 +275,6 @@ function renderClassCoversGrid() {
     const classGrid = document.getElementById('class-covers-grid');
     classGrid.innerHTML = '';
 
-    // Generate dropdown options from GitHub images
     let imageOptionsHtml = `<option value="" disabled selected>-- Select an Image --</option>`;
     allGithubImages.forEach(img => {
         imageOptionsHtml += `<option value="${img.url}">${img.name}</option>`;
@@ -267,9 +291,11 @@ function renderClassCoversGrid() {
             ? `<div class="status-badge status-live"><i class='bx bx-broadcast'></i> LIVE</div>` 
             : `<div class="status-badge status-offline"><i class='bx bx-archive-in'></i> NOT SET</div>`;
 
-        const button = isLive
+        const actionsHtml = isLive
             ? `<button class="btn-offline" onclick="removeClassCover('${cls}')"><i class='bx bx-cloud-download'></i> Remove Cover</button>`
             : `<button class="btn-publish" onclick="publishClassCover('${cls}')"><i class='bx bx-cloud-upload'></i> Set Cover</button>`;
+
+        const previewBtn = `<button class="btn-preview" onclick="previewMaterial('${cls}', '${imgUrl}')" title="Preview App Layout"><i class='bx bx-mobile-alt'></i></button>`;
 
         card.innerHTML = `
             <div class="card-image-container">
@@ -277,11 +303,16 @@ function renderClassCoversGrid() {
                 ${badge}
             </div>
             <div class="card-content">
-                <div class="card-title">${cls}</div>
+                <div class="card-title-wrapper" style="margin-bottom:8px;">
+                    <div class="card-title">${cls}</div>
+                </div>
                 <select id="coverSelect-${cls}" class="card-select" ${isLive ? 'disabled' : ''}>
                     ${imageOptionsHtml}
                 </select>
-                ${button}
+                <div class="card-actions-row">
+                    ${previewBtn}
+                    ${actionsHtml}
+                </div>
             </div>
         `;
         classGrid.appendChild(card);
@@ -289,7 +320,67 @@ function renderClassCoversGrid() {
 }
 
 // ==========================================
-// 8. ACTIONS: MATERIAL PUBLISH / OFFLINE
+// 8. ACTIONS: RENAME / PREVIEW MODALS
+// ==========================================
+window.openRenameModal = (oldName, className) => {
+    document.getElementById('renameOldName').value = oldName;
+    document.getElementById('renameClass').value = className;
+    document.getElementById('renameInput').value = oldName;
+    document.getElementById('renameModal').classList.remove('hidden');
+};
+
+window.closeRenameModal = () => {
+    document.getElementById('renameModal').classList.add('hidden');
+};
+
+window.confirmRename = async () => {
+    const oldName = document.getElementById('renameOldName').value;
+    const className = document.getElementById('renameClass').value;
+    const newName = document.getElementById('renameInput').value.trim();
+
+    if (!newName || newName === oldName) {
+        closeRenameModal();
+        return;
+    }
+
+    try {
+        const material = globalMergedData[oldName];
+        const docRef = doc(db, "Curriculum", className);
+
+        // 1. Add the New Name with the existing URLs
+        await updateDoc(docRef, {
+            subjects: arrayUnion(newName),
+            [`pdf_links.${newName}`]: material.pdfUrl,
+            [`image_links.${newName}`]: material.imgUrl
+        });
+
+        // 2. Remove the Old Name
+        await updateDoc(docRef, {
+            subjects: arrayRemove(oldName),
+            [`pdf_links.${oldName}`]: deleteField(),
+            [`image_links.${oldName}`]: deleteField()
+        });
+
+        showToast(`Subject renamed to "${newName}" successfully!`, "success");
+        closeRenameModal();
+        loadDashboard(); // Refresh UI
+    } catch (e) {
+        showToast("Failed to rename subject.", "error");
+    }
+};
+
+window.previewMaterial = (title, imgUrl) => {
+    document.getElementById('previewTitle').innerText = title;
+    document.getElementById('previewImage').src = imgUrl;
+    document.getElementById('previewModal').classList.remove('hidden');
+};
+
+window.closePreviewModal = () => {
+    document.getElementById('previewModal').classList.add('hidden');
+};
+
+// ==========================================
+// 9. ACTIONS: PUBLISH / OFFLINE
 // ==========================================
 window.publishMaterialLive = async (subjectName, pdfUrl, imgUrl) => {
     const classSelect = document.getElementById(`select-${subjectName}`);
@@ -339,9 +430,6 @@ window.takeMaterialOffline = async (subjectName, currentClass) => {
     }
 }
 
-// ==========================================
-// 9. ACTIONS: CLASS COVER PUBLISH / OFFLINE
-// ==========================================
 window.publishClassCover = async (className) => {
     const selectBox = document.getElementById(`coverSelect-${className}`);
     const imgUrl = selectBox.value;
@@ -352,7 +440,6 @@ window.publishClassCover = async (className) => {
     }
 
     try {
-        // We use setDoc with { merge: true } so we don't accidentally delete other class covers
         await setDoc(doc(db, "Admin", "ClassCovers"), {
             [className]: imgUrl
         }, { merge: true });
