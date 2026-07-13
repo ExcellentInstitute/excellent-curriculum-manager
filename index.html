@@ -8,6 +8,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
     
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet">
+    
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -39,10 +41,13 @@
                 <div class="brand-logo small"><i class='bx bxs-graduation'></i></div>
                 <div>
                     <h3>Command Center</h3>
-                    <span class="version-tag">Deployment Engine v3.0</span>
+                    <span class="version-tag">Deployment Engine v4.0 (Grid + Crop)</span>
                 </div>
             </div>
             <div class="nav-actions">
+                <button class="btn-secondary" onclick="openCropModal()" style="margin-right: 16px;">
+                    <i class='bx bx-crop'></i> Crop Image Tool
+                </button>
                 <div class="admin-profile">
                     <div class="avatar"><i class='bx bx-user'></i></div>
                     <span>Admin Active</span>
@@ -122,7 +127,7 @@
             <div id="classCoversView" class="view-section hidden">
                 <div class="section-header" style="margin-bottom: 24px;">
                     <h2 style="font-size: 20px; color: var(--text-main);">Class Cover Manager</h2>
-                    <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Assign repository images to customize the Android home screen.</p>
+                    <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Assign repository images or paste a custom URL to customize the Android home screen.</p>
                 </div>
                 
                 <section id="class-covers-grid" class="content-grid">
@@ -153,28 +158,65 @@
     </div>
 
     <div id="previewModal" class="modal-overlay hidden">
-        <div class="modal-card preview-card">
+        <div class="modal-card preview-card" style="max-width: 500px;">
             <div class="modal-header">
-                <h3>App Visualizer</h3>
+                <h3>App Grid Visualizer</h3>
                 <button class="btn-icon" onclick="closePreviewModal()"><i class='bx bx-x'></i></button>
             </div>
-            <p class="modal-subtitle">This is how the image maps to the 2:3 ratio inside the app.</p>
+            <p class="modal-subtitle">Live preview of the Android 2-Column Grid Layout.</p>
             
             <div class="phone-frame">
                 <div class="phone-notch"></div>
                 <div class="phone-screen">
-                    <div class="app-card-preview">
-                        <img id="previewImage" src="" alt="Preview">
-                        <div class="app-card-title" id="previewTitle">Subject Name</div>
+                    <div class="android-grid-layout">
+                        
+                        <div class="app-card-preview">
+                            <img id="previewImage" src="" alt="Preview">
+                            <div class="app-card-title" id="previewTitle">Subject Name</div>
+                        </div>
+
+                        <div class="app-card-preview dummy-card">
+                            <div class="dummy-img-placeholder">
+                                <i class='bx bx-image' style="font-size: 32px; color: #ccc;"></i>
+                            </div>
+                            <div class="app-card-title" style="color: #888;">Next Subject</div>
+                        </div>
+
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div id="cropModal" class="modal-overlay hidden">
+        <div class="modal-card" style="max-width: 800px; width: 95%;">
+            <div class="modal-header">
+                <h3>Image Crop Studio (2:3 App Ratio)</h3>
+                <button class="btn-icon" onclick="closeCropModal()"><i class='bx bx-x'></i></button>
+            </div>
+            <p class="modal-subtitle">Upload a local image, crop it perfectly for the Android Cards, and download it for GitHub.</p>
             
+            <div style="margin-top: 16px; margin-bottom: 16px;">
+                <input type="file" id="cropFileInput" accept="image/*" style="display: block; margin-bottom: 12px;">
+            </div>
+
+            <div class="crop-container" style="height: 400px; background: #e9ecef; border-radius: 8px; overflow: hidden; display: flex; justify-content: center; align-items: center;">
+                <img id="cropImageTarget" style="max-width: 100%; display: none;">
+                <span id="cropPlaceholderText" style="color: #6c757d;">Select an image to start cropping</span>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeCropModal()">Cancel</button>
+                <button class="btn-primary" onclick="downloadCroppedImage()" id="btnDownloadCrop" disabled>
+                    <i class='bx bx-download'></i> Download Cropped Image
+                </button>
+            </div>
         </div>
     </div>
 
     <div id="toast-container" class="toast-container"></div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
     <script type="module" src="app.js"></script>
 </body>
 </html>
