@@ -39,7 +39,7 @@
                 <div class="brand-logo small"><i class='bx bxs-graduation'></i></div>
                 <div>
                     <h3>Command Center</h3>
-                    <span class="version-tag">Deployment Engine v2.1</span>
+                    <span class="version-tag">Deployment Engine v3.0</span>
                 </div>
             </div>
             <div class="nav-actions">
@@ -126,10 +126,51 @@
                 </div>
                 
                 <section id="class-covers-grid" class="content-grid">
-                    </section>
+                     </section>
             </div>
 
         </main>
+    </div>
+
+    <div id="renameModal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <h3>Rename Subject</h3>
+            <p class="modal-subtitle">Update the display name in the Android App.</p>
+            
+            <input type="hidden" id="renameOldName">
+            <input type="hidden" id="renameClass">
+            
+            <div class="input-wrapper" style="margin-top: 20px;">
+                <i class='bx bx-edit-alt icon-left'></i>
+                <input type="text" id="renameInput" placeholder="Enter new subject name">
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeRenameModal()">Cancel</button>
+                <button class="btn-primary" onclick="confirmRename()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="previewModal" class="modal-overlay hidden">
+        <div class="modal-card preview-card">
+            <div class="modal-header">
+                <h3>App Visualizer</h3>
+                <button class="btn-icon" onclick="closePreviewModal()"><i class='bx bx-x'></i></button>
+            </div>
+            <p class="modal-subtitle">This is how the image maps to the 2:3 ratio inside the app.</p>
+            
+            <div class="phone-frame">
+                <div class="phone-notch"></div>
+                <div class="phone-screen">
+                    <div class="app-card-preview">
+                        <img id="previewImage" src="" alt="Preview">
+                        <div class="app-card-title" id="previewTitle">Subject Name</div>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
     </div>
 
     <div id="toast-container" class="toast-container"></div>
