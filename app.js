@@ -219,11 +219,28 @@ function createMaterialCardHTML(item, container) {
     const card = document.createElement('div');
     card.className = 'subject-card';
 
+    // 1. Class Dropdown
     let optionsHtml = `<option value="" disabled ${!item.isLive ? 'selected' : ''}>-- Assign a Class --</option>`;
     CLASSES.forEach(cls => {
         const selected = (cls === item.currentClass) ? 'selected' : '';
         optionsHtml += `<option value="${cls}" ${selected}>${cls}</option>`;
     });
+
+    // 2. NEW: Cover Image Dropdown (Specific to each Subject)
+    let imageOptionsHtml = `<option value="" disabled ${!item.imgUrl || item.imgUrl.includes('placeholder') ? 'selected' : ''}>-- Select Cover Image --</option>`;
+    imageOptionsHtml += `<option value="CUSTOM">🔗 -- Paste Custom URL --</option>`;
+    
+    let imgFound = false;
+    allGithubImages.forEach(img => {
+        const isSelected = (item.imgUrl === img.url) ? 'selected' : '';
+        if (isSelected) imgFound = true;
+        imageOptionsHtml += `<option value="${img.url}" ${isSelected}>${img.name}</option>`;
+    });
+
+    // If they manually assigned a custom URL in the past, keep it visible in the list
+    if (item.imgUrl && !item.imgUrl.includes('placeholder') && !imgFound) {
+        imageOptionsHtml += `<option value="${item.imgUrl}" selected>🔗 Custom Link Attached</option>`;
+    }
 
     const badge = item.isLive 
         ? `<div class="status-badge status-live"><i class='bx bx-broadcast'></i> LIVE IN APP</div>` 
@@ -231,12 +248,17 @@ function createMaterialCardHTML(item, container) {
 
     const actionsHtml = item.isLive
         ? `<button class="btn-offline" onclick="takeMaterialOffline('${item.name}', '${item.currentClass}')"><i class='bx bx-cloud-download'></i> Offline</button>`
-        : `<button class="btn-publish" onclick="publishMaterialLive('${item.name}', '${item.pdfUrl}', '${item.imgUrl}')"><i class='bx bx-cloud-upload'></i> Publish</button>`;
+        : `<button class="btn-publish" onclick="publishMaterialLive('${item.name}', '${item.pdfUrl}')"><i class='bx bx-cloud-upload'></i> Publish</button>`;
 
     const previewBtn = `<button class="btn-preview" onclick="previewMaterial('${item.name}', '${item.imgUrl}')" title="Preview App Layout"><i class='bx bx-mobile-alt'></i></button>`;
     const renameBtn = item.isLive 
         ? `<button class="btn-rename" onclick="openRenameModal('${item.name}', '${item.currentClass}')" title="Rename Subject Display"><i class='bx bx-edit-alt'></i></button>` 
         : '';
+
+    // Smart Handler: Updates preview if offline, instantly saves to database if live!
+    const onImageChange = item.isLive 
+        ? `onchange="updateLiveSubjectImage('${item.name}', '${item.currentClass}', this.value)"` 
+        : `onchange="updateCardImagePreview('${item.name}', this.value)"`;
 
     card.innerHTML = `
         <div class="card-image-container">
@@ -250,6 +272,9 @@ function createMaterialCardHTML(item, container) {
             </div>
             <select id="select-${item.name}" class="card-select" ${item.isLive ? 'disabled' : ''}>
                 ${optionsHtml}
+            </select>
+            <select id="imgSelect-${item.name}" class="card-select" ${onImageChange}>
+                ${imageOptionsHtml}
             </select>
             <div class="card-actions-row">
                 ${previewBtn}
@@ -267,7 +292,6 @@ function renderClassCoversGrid() {
     const classGrid = document.getElementById('class-covers-grid');
     classGrid.innerHTML = '';
 
-    // NEW: Allow Custom URLs to be pasted directly!
     let imageOptionsHtml = `<option value="" disabled selected>-- Select an Image --</option>`;
     imageOptionsHtml += `<option value="CUSTOM">🔗 -- Paste Custom URL --</option>`;
     
@@ -315,7 +339,7 @@ function renderClassCoversGrid() {
 }
 
 // ==========================================
-// 8. IMAGE CROP STUDIO LOGIC (NEW)
+// 8. IMAGE CROP STUDIO LOGIC
 // ==========================================
 window.openCropModal = () => {
     document.getElementById('cropModal').classList.remove('hidden');
@@ -349,7 +373,6 @@ document.getElementById('cropFileInput').addEventListener('change', function(e) 
             window.currentCropper.destroy();
         }
         
-        // Lock cropper to Android's exact 2:3 card ratio
         window.currentCropper = new Cropper(img, {
             aspectRatio: 2 / 3,
             viewMode: 1,
@@ -362,11 +385,7 @@ document.getElementById('cropFileInput').addEventListener('change', function(e) 
 window.downloadCroppedImage = () => {
     if(!window.currentCropper) return;
     
-    // Creates a perfect high-res image for the app
-    const canvas = window.currentCropper.getCroppedCanvas({
-        width: 600,
-        height: 900
-    });
+    const canvas = window.currentCropper.getCroppedCanvas({ width: 600, height: 900 });
     
     canvas.toBlob((blob) => {
         const url = URL.createObjectURL(blob);
@@ -383,7 +402,7 @@ window.downloadCroppedImage = () => {
 
 
 // ==========================================
-// 9. ACTIONS: RENAME / PREVIEW MODALS
+// 9. ACTIONS: RENAME / PREVIEW / LIVE UPDATE MODALS
 // ==========================================
 window.openRenameModal = (oldName, className) => {
     document.getElementById('renameOldName').value = oldName;
@@ -440,17 +459,80 @@ window.closePreviewModal = () => {
     document.getElementById('previewModal').classList.add('hidden');
 };
 
+// NEW: Updates UI live so you can preview custom URLs before publishing
+window.updateCardImagePreview = (subjectName, imgUrl) => {
+    if (imgUrl === "CUSTOM") {
+        imgUrl = prompt(`Paste the custom image URL for ${subjectName}:`);
+        if (!imgUrl || (!imgUrl.startsWith("http") && !imgUrl.startsWith("https"))) {
+            showToast("Invalid URL provided. Must start with http/https.", "error");
+            document.getElementById(`imgSelect-${subjectName}`).value = ""; 
+            return;
+        }
+        
+        const select = document.getElementById(`imgSelect-${subjectName}`);
+        const opt = document.createElement('option');
+        opt.value = imgUrl;
+        opt.text = "🔗 Custom Link Attached";
+        opt.selected = true;
+        select.appendChild(opt);
+    }
+    
+    const card = document.getElementById(`imgSelect-${subjectName}`).closest('.subject-card');
+    const img = card.querySelector('.card-image-container img');
+    if(img) img.src = imgUrl;
+    
+    const previewBtn = card.querySelector('.btn-preview');
+    if(previewBtn) {
+        previewBtn.setAttribute('onclick', `previewMaterial('${subjectName}', '${imgUrl}')`);
+    }
+};
+
+// NEW: Directly updates Firebase if the admin changes the image on a Live Subject
+window.updateLiveSubjectImage = async (subjectName, className, imgUrl) => {
+    if (imgUrl === "CUSTOM") {
+        imgUrl = prompt(`Paste the custom image URL for ${subjectName}:`);
+        if (!imgUrl || (!imgUrl.startsWith("http") && !imgUrl.startsWith("https"))) {
+            showToast("Invalid URL provided. Must start with http/https.", "error");
+            loadDashboard(); // Resets the dropdown visually
+            return;
+        }
+    }
+
+    try {
+        const docRef = doc(db, "Curriculum", className);
+        await updateDoc(docRef, {
+            [`image_links.${subjectName}`]: imgUrl
+        });
+        showToast(`Cover updated for "${subjectName}"!`, "success");
+        loadDashboard(); 
+    } catch (e) {
+        showToast("Failed to update cover.", "error");
+    }
+};
+
 
 // ==========================================
 // 10. ACTIONS: PUBLISH / OFFLINE
 // ==========================================
-window.publishMaterialLive = async (subjectName, pdfUrl, imgUrl) => {
+window.publishMaterialLive = async (subjectName, pdfUrl) => {
     const classSelect = document.getElementById(`select-${subjectName}`);
+    const imgSelect = document.getElementById(`imgSelect-${subjectName}`);
     const selectedClass = classSelect.value;
+    let imgUrl = imgSelect.value;
 
     if(!selectedClass) {
         showToast("Select a class before publishing!", "error");
         return;
+    }
+    if(!imgUrl) {
+        showToast("Please select a cover image!", "error");
+        return;
+    }
+    
+    // Fallback safeguard in case Custom wasn't filled out properly
+    if (imgUrl === "CUSTOM") {
+         showToast("Please provide a valid Custom URL first.", "error");
+         return;
     }
 
     try {
@@ -501,7 +583,6 @@ window.publishClassCover = async (className) => {
         return;
     }
 
-    // NEW: Handle Custom URLs inputted by the admin
     if (imgUrl === "CUSTOM") {
         imgUrl = prompt(`Paste the custom image URL for ${className}:`);
         if (!imgUrl || (!imgUrl.startsWith("http") && !imgUrl.startsWith("https"))) {
