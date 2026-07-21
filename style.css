@@ -296,12 +296,13 @@ body {
 }
 .card-title { font-size: 18px; font-weight: 700; color: var(--text-main); }
 
+/* UPDATED: Reduced margin to neatly fit dual dropdowns */
 .card-select {
     width: 100%;
-    padding: 12px;
+    padding: 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-color);
-    margin-bottom: 16px;
+    margin-bottom: 10px;
     font-size: 14px;
     background: var(--secondary);
     outline: none;
@@ -311,7 +312,8 @@ body {
 .card-actions-row {
     display: flex;
     gap: 8px;
-    margin-top: auto;
+    margin-top: auto; /* Pins buttons perfectly to the bottom */
+    padding-top: 10px;
 }
 .card-actions-row button {
     flex: 1;
