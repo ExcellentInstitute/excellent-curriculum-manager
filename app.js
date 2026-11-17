@@ -2,7 +2,7 @@
 // 1. FIREBASE IMPORTS
 // ==========================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getFirestore, doc, updateDoc, setDoc, arrayUnion, arrayRemove, deleteField, getDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getFirestore, doc, updateDoc, setDoc, arrayUnion, arrayRemove, deleteField, getDoc, collection, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 // ==========================================
 // 2. CONFIGURATIONS
@@ -635,3 +635,39 @@ function showToast(message, type) {
         setTimeout(() => toast.remove(), 400); 
     }, 4000);
 }
+// ==========================================
+// 12. MOVE AI CHUNKS FROM FIREBASE TO GITHUB (DOWNLOAD & DELETE)
+// ==========================================
+window.moveFirebaseAiChunksToPc = async () => {
+    try {
+        const snap = await getDocs(collection(db, "AiPendingChunks"));
+        if (snap.empty) {
+            showToast("No pending AI chunks in Firebase right now!", "error");
+            return;
+        }
+
+        if (!confirm(`Found ${snap.size} AI page chunk(s) in Firebase. Download them to your PC and DELETE them from Firebase?`)) {
+            return;
+        }
+
+        for (const docSnap of snap.docs) {
+            const data = docSnap.data();
+            const fileName = `${data.book_id || docSnap.id}_p${data.page_number || 1}.json`;
+            const jsonBlob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(jsonBlob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            // Delete from Firebase after downloading ("Move, not copy")
+            await deleteDoc(doc(db, "AiPendingChunks", docSnap.id));
+        }
+
+        showToast(`Moved ${snap.size} AI JSON file(s) to PC and cleared Firebase! Upload them to your GitHub 'chunks/' folder.`, "success");
+    } catch (e) {
+        console.error(e);
+        showToast("Error moving AI chunks from Firebase.", "error");
+    }
+};
