@@ -671,3 +671,45 @@ window.moveFirebaseAiChunksToPc = async () => {
         showToast("Error moving AI chunks from Firebase.", "error");
     }
 };
+// ==========================================
+// 13. MANAGE 3 SIDEBARS, YOUTUBE VIDEOS & LIVE CLASS
+// ==========================================
+window.manageAppPortalConfig = async () => {
+    try {
+        const ref = doc(db, "Admin", "AppPortal");
+        const snap = await getDoc(ref);
+        const cur = snap.exists() ? snap.data() : {};
+
+        const liveId = prompt("1. Enter YouTube LIVE Video URL or Video ID:", cur.live_youtube_id || "jfKfPfyJRdk");
+        if (liveId === null) return;
+        const liveTitle = prompt("2. Enter Live Class Title:", cur.live_class_title || "🔴 Live Class (ଲାଇଭ୍ କ୍ଲାସ୍)");
+
+        const s1Body = prompt("3. Sidebar 1 (Notice Board) Text or Link:", cur.sidebar1_body || "ନୂତନ ଶିକ୍ଷାବର୍ଷ ପାଇଁ ସମସ୍ତ ବହି ଉପଲବ୍ଧ ଅଛି।");
+        const s2Body = prompt("4. Sidebar 2 (Exam Routine) Text or Link:", cur.sidebar2_body || "ପ୍ରତି ରବିବାର ଲାଇଭ୍ କ୍ଲାସ୍।");
+        const s3Body = prompt("5. Sidebar 3 (Help Desk) Text or Link:", cur.sidebar3_body || "Excellent Institute, Odisha");
+
+        const newVideoTitle = prompt("6. (Optional) Add a Video Lesson Title (or leave blank):", "");
+        const videoMap = cur.video_lessons || {};
+        if (newVideoTitle && newVideoTitle.trim() !== "") {
+            const newVideoUrl = prompt(`Enter YouTube URL/ID for "${newVideoTitle}":`, "");
+            if (newVideoUrl) videoMap[newVideoTitle.trim()] = newVideoUrl.trim();
+        }
+
+        await setDoc(ref, {
+            live_youtube_id: liveId.trim(),
+            live_class_title: liveTitle || "🔴 Live Class",
+            sidebar1_title: "📢 ସୂଚନା ଫଳକ (Notice Board)",
+            sidebar1_body: s1Body || "",
+            sidebar2_title: "📅 ପରୀକ୍ଷା ସୂଚୀ (Exam Routine)",
+            sidebar2_body: s2Body || "",
+            sidebar3_title: "📞 ସହାୟତା କେନ୍ଦ୍ର (Help Desk)",
+            sidebar3_body: s3Body || "",
+            video_lessons: videoMap
+        }, { merge: true });
+
+        showToast("Sidebars, Video Lessons & Live Class updated in App!", "success");
+    } catch (e) {
+        console.error(e);
+        showToast("Failed to update App Portal settings.", "error");
+    }
+};
