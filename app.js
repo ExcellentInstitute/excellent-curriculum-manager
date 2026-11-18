@@ -51,7 +51,7 @@ let portalConfig = {
     custom_sections: [],
     video_lessons: {}
 };
-let simActiveTab = "STUDY";
+let simActiveTab = "HOME";
 let simSelectedClass = null;
 let simDarkMode = false;
 window.currentCropper = null;
@@ -244,43 +244,63 @@ async function savePortalConfigToFirebase() {
     await setDoc(doc(db, "Admin", "AppPortal"), portalConfig, { merge: true });
     renderInteractiveSimulator();
 }
-
 function renderInteractiveSimulator() {
-    // 1. Header & Footer
-    document.getElementById('simHeaderTitle').innerText = (simSelectedClass ? `${simSelectedClass} - Subjects` : portalConfig.header_title_odia) + " ✏️";
-    document.getElementById('simFooterText').innerText = (portalConfig.footer_brand_text || "🦊 Excellent Institute") + " ✏️";
+    // 1. Top Header & Drawer Brand
+    const homeTitle = portalConfig.home_title_odia || "ମୁଖ୍ୟ ପୃଷ୍ଠା (Home)";
+    const studyTitle = portalConfig.header_title_odia || "ଶ୍ରେଣୀ ଚୟନ କରନ୍ତୁ";
+    document.getElementById('simHeaderTitle').innerText =
+        (simActiveTab === "HOME" ? homeTitle : simSelectedClass ? `${simSelectedClass} - Subjects` : studyTitle) + " ✏️";
+    document.getElementById('simDrawerBrand').innerText =
+        (portalConfig.footer_brand_text || "Excellent Institute").replace("🦊", "").trim() + " ✏️";
 
-    // 2. Scrollable Home Tabs + Dynamic Custom Sections
-    const tabsBar = document.getElementById('simTabsBar');
-    tabsBar.innerHTML = '';
+    // 2. Populate Core Navigation inside Slide-Out Drawer
+    const coreNav = document.getElementById('simDrawerCoreNav');
+    coreNav.innerHTML = '';
 
-    const defaultTabs = [
-        { id: "STUDY", label: portalConfig.tab_study_label || "📚 ପାଠ୍ୟ ପୁସ୍ତକ", field: "tab_study_label", color: "#4318FF" },
-        { id: "VIDEO", label: portalConfig.tab_video_label || "🎬 ଭିଡିଓ ଶିକ୍ଷା", field: "tab_video_label", color: "#05CD99" },
-        { id: "LIVE",  label: portalConfig.tab_live_label  || "🔴 ଲାଇଭ୍ କ୍ଲାସ୍", field: "tab_live_label",  color: "#EE5D50" }
+    const drawerNavItems = [
+        { id: "HOME",  label: portalConfig.drawer_home_label || "🏠 ମୁଖ୍ୟ ପୃଷ୍ଠା (Home)", field: "drawer_home_label", color: "#6366F1" },
+        { id: "STUDY", label: portalConfig.tab_study_label   || "📚 ପାଠ୍ୟ ପୁସ୍ତକ (Study Books)", field: "tab_study_label", color: "#4318FF" },
+        { id: "VIDEO", label: portalConfig.tab_video_label   || "🎬 ଭିଡିଓ ଶିକ୍ଷା (Video Classes)", field: "tab_video_label", color: "#05CD99" },
+        { id: "LIVE",  label: portalConfig.tab_live_label    || "🔴 ଲାଇଭ୍ କ୍ଲାସ୍ (Live Class)", field: "tab_live_label", color: "#EE5D50" }
     ];
 
-    defaultTabs.forEach(t => {
-        const btn = document.createElement('button');
-        btn.style.cssText = `background:${t.color}; color:white; padding:6px 10px; border-radius:10px; font-size:11px; font-weight:700; white-space:nowrap; display:flex; align-items:center; gap:4px;`;
-        btn.innerHTML = `<span onclick="switchSimTab('${t.id}')">${t.label}</span> <span onclick="event.stopPropagation(); editSimField('${t.field}', 'Tab Display Name')" title="Edit Tab Name">✏️</span>`;
-        tabsBar.appendChild(btn);
+    drawerNavItems.forEach(t => {
+        const row = document.createElement('div');
+        row.style.cssText = `background:${t.color}; color:white; padding:9px 12px; border-radius:10px; font-size:12px; font-weight:700; display:flex; justify-content:space-between; align-items:center; cursor:pointer;`;
+        row.innerHTML = `
+            <span onclick="switchSimTab('${t.id}')" style="flex:1;">${t.label}</span>
+            <span onclick="event.stopPropagation(); editSimField('${t.field}', 'Drawer Button Name')" title="Edit Name">✏️</span>
+        `;
+        coreNav.appendChild(row);
     });
 
     (portalConfig.custom_sections || []).forEach((sec, idx) => {
-        const btn = document.createElement('button');
-        btn.style.cssText = `background:#FF9800; color:white; padding:6px 10px; border-radius:10px; font-size:11px; font-weight:700; white-space:nowrap; display:flex; align-items:center; gap:4px;`;
-        btn.innerHTML = `<span onclick="switchSimTab('CUSTOM_${idx}')">${sec.title}</span> <span onclick="event.stopPropagation(); editCustomSection(${idx})" title="Edit Section">✏️</span>`;
-        tabsBar.appendChild(btn);
+        const row = document.createElement('div');
+        row.style.cssText = `background:#FF9800; color:white; padding:9px 12px; border-radius:10px; font-size:12px; font-weight:700; display:flex; justify-content:space-between; align-items:center; cursor:pointer;`;
+        row.innerHTML = `
+            <span onclick="switchSimTab('CUSTOM_${idx}')" style="flex:1;">${sec.title}</span>
+            <span onclick="event.stopPropagation(); editCustomSection(${idx})" title="Edit Section">✏️</span>
+        `;
+        coreNav.appendChild(row);
     });
 
-    // 3. Body Content Area
+    // 3. Render Main Screen Body (Blank Home by default!)
     const bodyArea = document.getElementById('simBodyArea');
     bodyArea.innerHTML = '';
 
-    if (simActiveTab === "STUDY") {
+    if (simActiveTab === "HOME") {
+        // Blank Home Screen (matching Android app default)
+        bodyArea.innerHTML = `
+            <div style="height:100%; display:flex; align-items:center; justify-content:center; text-align:center; color:rgba(27,37,89,0.45); font-size:12px; padding:24px;">
+                <div>
+                    <div style="font-size:28px; margin-bottom:6px;">🏠</div>
+                    <b>Blank Home Screen</b><br>
+                    Tap <b>☰</b> at top-left to slide out the Navigation Drawer!
+                </div>
+            </div>
+        `;
+    } else if (simActiveTab === "STUDY") {
         if (!simSelectedClass) {
-            // Render Classes Grid with Native Advanced Ads after every 2 rows (4 items)
             const grid = document.createElement('div');
             grid.style.cssText = "display:grid; grid-template-columns:1fr 1fr; gap:8px;";
 
@@ -298,7 +318,6 @@ function renderInteractiveSimulator() {
                 `;
                 grid.appendChild(card);
 
-                // Native Advanced Ad between 2nd & 3rd row (after 4th item) and 4th & 5th row (after 8th item)
                 if ((index + 1) % 4 === 0 || index === CLASSES.length - 1) {
                     const adBanner = document.createElement('div');
                     adBanner.style.cssText = "grid-column: span 2; background:rgba(67,24,255,0.1); border:1.5px dashed #4318FF; border-radius:10px; padding:8px; text-align:center; font-size:10px; font-weight:700; color:#4318FF;";
@@ -308,7 +327,6 @@ function renderInteractiveSimulator() {
             });
             bodyArea.appendChild(grid);
         } else {
-            // Render Subjects inside Selected Class
             const backBtn = document.createElement('button');
             backBtn.style.cssText = "margin-bottom:8px; background:#1B2559; color:white; padding:6px 12px; border-radius:8px; font-size:11px;";
             backBtn.innerText = "⬅ Back to All Classes";
@@ -354,9 +372,6 @@ function renderInteractiveSimulator() {
                     <span onclick="editSimField('live_youtube_id', 'YouTube Video / Live ID')" style="cursor:pointer; color:#4318FF;">✏️ Change ID</span>
                 </div>
                 <iframe width="100%" height="150" src="https://www.youtube.com/embed/${vidId}" frameborder="0" allowfullscreen style="border-radius:8px;"></iframe>
-                <div style="margin-top:8px; font-size:11px; color:#64748B;">
-                    ${simActiveTab === "LIVE" ? "💬 Official YouTube Live Chat loads below this video in the Android app." : "Click '+ Add Video Lesson' on the right panel to add lessons."}
-                </div>
             </div>
         `;
     } else if (simActiveTab.startsWith("CUSTOM_")) {
@@ -375,12 +390,12 @@ function renderInteractiveSimulator() {
         }
     }
 
-    // 4. Populate Sidebar Items inside Simulator Drawer
+    // 4. Populate Notice Items inside Slide-Out Drawer
     const sbList = document.getElementById('simSidebarItemsList');
     sbList.innerHTML = '';
     (portalConfig.sidebar_items || []).forEach((item, idx) => {
         const row = document.createElement('div');
-        row.style.cssText = "background:#4318FF; color:white; padding:8px 10px; border-radius:10px; font-size:11px; font-weight:600; display:flex; justify-content:space-between; align-items:center;";
+        row.style.cssText = "background:#3B82F6; color:white; padding:8px 10px; border-radius:10px; font-size:11px; font-weight:600; display:flex; justify-content:space-between; align-items:center;";
         row.innerHTML = `
             <span onclick="previewSidebarItem(${idx})" style="cursor:pointer; flex:1;">${item.title}</span>
             <span style="display:flex; gap:6px;">
@@ -416,14 +431,21 @@ function renderInteractiveSimulator() {
 }
 
 window.toggleSimSidebar = (show) => {
-    const el = document.getElementById('simSidebarOverlay');
-    if (show) el.classList.remove('hidden');
-    else el.classList.add('hidden');
+    const drawer = document.getElementById('simSidebarDrawer');
+    const backdrop = document.getElementById('simSidebarBackdrop');
+    if (show) {
+        backdrop.classList.remove('hidden');
+        drawer.style.transform = "translateX(0%)";
+    } else {
+        backdrop.classList.add('hidden');
+        drawer.style.transform = "translateX(-105%)";
+    }
 };
 
 window.switchSimTab = (tabId) => {
     simActiveTab = tabId;
     simSelectedClass = null;
+    toggleSimSidebar(false);
     renderInteractiveSimulator();
 };
 
