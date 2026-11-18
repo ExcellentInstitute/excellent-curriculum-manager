@@ -29,43 +29,69 @@ const CLASSES = ["ପ୍ରଥମ ଶ୍ରେଣୀ", "ଦ୍ୱିତୀୟ �
 let globalMergedData = {};
 let liveClassCovers = {};
 let allGithubImages = [];
-window.currentCropper = null; // Global reference for Cropper.js
+let portalConfig = {
+    header_title_odia: "ଶ୍ରେଣୀ ଚୟନ କରନ୍ତୁ",
+    header_title_en: "Select Your Class",
+    tab_study_label: "📚 ପାଠ୍ୟ ପୁସ୍ତକ",
+    tab_video_label: "🎬 ଭିଡିଓ ଶିକ୍ଷା",
+    tab_live_label: "🔴 ଲାଇଭ୍ କ୍ଲାସ୍",
+    footer_brand_text: "🦊 Excellent Institute • Odisha",
+    live_youtube_id: "jfKfPfyJRdk",
+    live_class_title: "🔴 Live Class (ଲାଇଭ୍ କ୍ଲାସ୍)",
+    social_youtube: "https://www.youtube.com",
+    social_instagram: "https://www.instagram.com",
+    social_facebook: "https://www.facebook.com",
+    social_map: "https://maps.google.com",
+    custom_class_names: {},
+    sidebar_items: [
+        { title: "📢 ସୂଚନା ଫଳକ (Notice Board)", target: "ନୂତନ ଶିକ୍ଷାବର୍ଷ ପାଇଁ ସମସ୍ତ ବହି ଏବଂ AI ଶିକ୍ଷକ ଉପଲବ୍ଧ ଅଛି।" },
+        { title: "📅 ପରୀକ୍ଷା ସୂଚୀ (Exam Routine)", target: "ପ୍ରତି ରବିବାର ଲାଇଭ୍ କ୍ଲାସ୍ ଏବଂ ସାପ୍ତାହିକ ଅଭ୍ୟାସ ପରୀକ୍ଷା।" },
+        { title: "📞 ସହାୟତା କେନ୍ଦ୍ର (Help Desk)", target: "Excellent Institute, Odisha • କୌଣସି ସନ୍ଦେହ ଥିଲେ Foxy AI କୁ ପଚାରନ୍ତୁ।" }
+    ],
+    custom_sections: [],
+    video_lessons: {}
+};
+let simActiveTab = "STUDY";
+let simSelectedClass = null;
+let simDarkMode = false;
+window.currentCropper = null;
 
 // ==========================================
-// 3. UI ELEMENTS & EVENT LISTENERS
+// 3. UI ELEMENTS & TAB NAVIGATION
 // ==========================================
 const loginSection = document.getElementById('login-section');
 const dashboardSection = document.getElementById('dashboard-section');
 const systemStatus = document.getElementById('systemStatus');
 
-// Tab Navigation Logic
+const tabSimulatorBtn = document.getElementById('tabSimulatorBtn');
 const tabMaterialsBtn = document.getElementById('tabMaterialsBtn');
 const tabClassesBtn = document.getElementById('tabClassesBtn');
+
+const simulatorView = document.getElementById('simulatorView');
 const materialsView = document.getElementById('materialsView');
 const classCoversView = document.getElementById('classCoversView');
 
-tabMaterialsBtn.addEventListener('click', () => {
-    tabMaterialsBtn.classList.add('active');
-    tabClassesBtn.classList.remove('active');
-    materialsView.classList.add('active');
-    materialsView.classList.remove('hidden');
-    classCoversView.classList.remove('active');
-    classCoversView.classList.add('hidden');
-});
+function switchDashboardTab(activeBtn, activeView) {
+    [tabSimulatorBtn, tabMaterialsBtn, tabClassesBtn].forEach(b => b.classList.remove('active'));
+    [simulatorView, materialsView, classCoversView].forEach(v => {
+        v.classList.remove('active');
+        v.classList.add('hidden');
+    });
+    activeBtn.classList.add('active');
+    activeView.classList.add('active');
+    activeView.classList.remove('hidden');
+}
 
-tabClassesBtn.addEventListener('click', () => {
-    tabClassesBtn.classList.add('active');
-    tabMaterialsBtn.classList.remove('active');
-    classCoversView.classList.add('active');
-    classCoversView.classList.remove('hidden');
-    materialsView.classList.remove('active');
-    materialsView.classList.add('hidden');
-});
+tabSimulatorBtn.addEventListener('click', () => switchDashboardTab(tabSimulatorBtn, simulatorView));
+tabMaterialsBtn.addEventListener('click', () => switchDashboardTab(tabMaterialsBtn, materialsView));
+tabClassesBtn.addEventListener('click', () => switchDashboardTab(tabClassesBtn, classCoversView));
 
-// Search & Filter (Materials Tab)
 document.getElementById('searchInput').addEventListener('input', renderMaterialGrid);
 document.getElementById('classFilter').addEventListener('change', renderMaterialGrid);
-document.getElementById('refreshBtn').addEventListener('click', loadDashboard);
+document.getElementById('refreshBtn').addEventListener('click', () => {
+    sessionStorage.removeItem('gh_materials_cache');
+    loadDashboard();
+});
 
 // ==========================================
 // 4. SECURE LOGIN
@@ -96,13 +122,28 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
 document.getElementById('logoutBtn').addEventListener('click', () => window.location.reload());
 
 // ==========================================
-// 5. CORE ENGINE: SCAN & MERGE DATA
+// 5. CORE ENGINE: SCAN & MERGE DATA (WITH BANDWIDTH CACHE)
 // ==========================================
 async function loadDashboard() {
-    systemStatus.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Scanning GitHub and syncing with Firebase...";
+    systemStatus.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Syncing Firebase & GitHub...";
     systemStatus.style.color = "var(--text-main)";
     
     try {
+        // Load Portal Config
+        const portalSnap = await getDoc(doc(db, "Admin", "AppPortal"));
+        if (portalSnap.exists()) {
+            portalConfig = { ...portalConfig, ...portalSnap.data() };
+            if (!Array.isArray(portalConfig.sidebar_items) || portalConfig.sidebar_items.length === 0) {
+                portalConfig.sidebar_items = [
+                    { title: portalConfig.sidebar1_title || "📢 ସୂଚନା ଫଳକ (Notice Board)", target: portalConfig.sidebar1_body || "" },
+                    { title: portalConfig.sidebar2_title || "📅 ପରୀକ୍ଷା ସୂଚୀ (Exam Routine)", target: portalConfig.sidebar2_body || "" },
+                    { title: portalConfig.sidebar3_title || "📞 ସହାୟତା କେନ୍ଦ୍ର (Help Desk)", target: portalConfig.sidebar3_body || "" }
+                ];
+            }
+            if (!Array.isArray(portalConfig.custom_sections)) portalConfig.custom_sections = [];
+            if (!portalConfig.custom_class_names) portalConfig.custom_class_names = {};
+        }
+
         const liveData = {};
         for (const cls of CLASSES) {
             const docSnap = await getDoc(doc(db, "Curriculum", cls));
@@ -110,7 +151,7 @@ async function loadDashboard() {
                 const data = docSnap.data();
                 if (data.subjects) {
                     data.subjects.forEach(sub => {
-                        liveData[sub] = { class: cls, pdf: data.pdf_links[sub], img: data.image_links[sub] };
+                        liveData[sub] = { class: cls, pdf: data.pdf_links?.[sub] || "", img: data.image_links?.[sub] || "" };
                     });
                 }
             }
@@ -122,8 +163,19 @@ async function loadDashboard() {
         const githubData = {};
         allGithubImages = []; 
         
-        const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/materials`);
-        const files = await res.json();
+        // Use sessionStorage cache to save GitHub API bandwidth unless 'Sync Repo' is clicked
+        let files = null;
+        const cachedGh = sessionStorage.getItem('gh_materials_cache');
+        if (cachedGh) {
+            try { files = JSON.parse(cachedGh); } catch (_) {}
+        }
+        if (!files) {
+            const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/materials`);
+            files = await res.json();
+            if (Array.isArray(files)) {
+                sessionStorage.setItem('gh_materials_cache', JSON.stringify(files));
+            }
+        }
 
         if (Array.isArray(files)) {
             files.forEach(file => {
@@ -176,6 +228,7 @@ async function loadDashboard() {
         
         renderMaterialGrid(); 
         renderClassCoversGrid();
+        renderInteractiveSimulator();
 
     } catch (error) {
         console.error(error);
@@ -183,6 +236,320 @@ async function loadDashboard() {
         systemStatus.style.color = "var(--error)";
     }
 }
+
+// ==========================================
+// 5B. INTERACTIVE LIVE APP SIMULATOR & VISUAL EDITOR
+// ==========================================
+async function savePortalConfigToFirebase() {
+    await setDoc(doc(db, "Admin", "AppPortal"), portalConfig, { merge: true });
+    renderInteractiveSimulator();
+}
+
+function renderInteractiveSimulator() {
+    // 1. Header & Footer
+    document.getElementById('simHeaderTitle').innerText = (simSelectedClass ? `${simSelectedClass} - Subjects` : portalConfig.header_title_odia) + " ✏️";
+    document.getElementById('simFooterText').innerText = (portalConfig.footer_brand_text || "🦊 Excellent Institute") + " ✏️";
+
+    // 2. Scrollable Home Tabs + Dynamic Custom Sections
+    const tabsBar = document.getElementById('simTabsBar');
+    tabsBar.innerHTML = '';
+
+    const defaultTabs = [
+        { id: "STUDY", label: portalConfig.tab_study_label || "📚 ପାଠ୍ୟ ପୁସ୍ତକ", field: "tab_study_label", color: "#4318FF" },
+        { id: "VIDEO", label: portalConfig.tab_video_label || "🎬 ଭିଡିଓ ଶିକ୍ଷା", field: "tab_video_label", color: "#05CD99" },
+        { id: "LIVE",  label: portalConfig.tab_live_label  || "🔴 ଲାଇଭ୍ କ୍ଲାସ୍", field: "tab_live_label",  color: "#EE5D50" }
+    ];
+
+    defaultTabs.forEach(t => {
+        const btn = document.createElement('button');
+        btn.style.cssText = `background:${t.color}; color:white; padding:6px 10px; border-radius:10px; font-size:11px; font-weight:700; white-space:nowrap; display:flex; align-items:center; gap:4px;`;
+        btn.innerHTML = `<span onclick="switchSimTab('${t.id}')">${t.label}</span> <span onclick="event.stopPropagation(); editSimField('${t.field}', 'Tab Display Name')" title="Edit Tab Name">✏️</span>`;
+        tabsBar.appendChild(btn);
+    });
+
+    (portalConfig.custom_sections || []).forEach((sec, idx) => {
+        const btn = document.createElement('button');
+        btn.style.cssText = `background:#FF9800; color:white; padding:6px 10px; border-radius:10px; font-size:11px; font-weight:700; white-space:nowrap; display:flex; align-items:center; gap:4px;`;
+        btn.innerHTML = `<span onclick="switchSimTab('CUSTOM_${idx}')">${sec.title}</span> <span onclick="event.stopPropagation(); editCustomSection(${idx})" title="Edit Section">✏️</span>`;
+        tabsBar.appendChild(btn);
+    });
+
+    // 3. Body Content Area
+    const bodyArea = document.getElementById('simBodyArea');
+    bodyArea.innerHTML = '';
+
+    if (simActiveTab === "STUDY") {
+        if (!simSelectedClass) {
+            // Render Classes Grid with Native Advanced Ads after every 2 rows (4 items)
+            const grid = document.createElement('div');
+            grid.style.cssText = "display:grid; grid-template-columns:1fr 1fr; gap:8px;";
+
+            CLASSES.forEach((clsKey, index) => {
+                const displayLabel = portalConfig.custom_class_names?.[clsKey] || clsKey;
+                const cover = liveClassCovers[clsKey] || "https://via.placeholder.com/300x400?text=Class";
+                const card = document.createElement('div');
+                card.style.cssText = "background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,0.06); border:1.5px solid #4318FF; cursor:pointer;";
+                card.innerHTML = `
+                    <img src="${cover}" onclick="openSimClass('${clsKey}')" style="width:100%; height:78px; object-fit:cover; display:block;">
+                    <div style="padding:6px; font-size:11px; font-weight:700; text-align:center; color:#1B2559; display:flex; justify-content:center; align-items:center; gap:4px;">
+                        <span onclick="openSimClass('${clsKey}')">${displayLabel}</span>
+                        <span onclick="event.stopPropagation(); renameSimClass('${clsKey}')" title="Rename Class">✏️</span>
+                    </div>
+                `;
+                grid.appendChild(card);
+
+                // Native Advanced Ad between 2nd & 3rd row (after 4th item) and 4th & 5th row (after 8th item)
+                if ((index + 1) % 4 === 0 || index === CLASSES.length - 1) {
+                    const adBanner = document.createElement('div');
+                    adBanner.style.cssText = "grid-column: span 2; background:rgba(67,24,255,0.1); border:1.5px dashed #4318FF; border-radius:10px; padding:8px; text-align:center; font-size:10px; font-weight:700; color:#4318FF;";
+                    adBanner.innerText = `📢 [Native Advanced Ad #${Math.ceil((index + 1) / 4)} - Full Row]`;
+                    grid.appendChild(adBanner);
+                }
+            });
+            bodyArea.appendChild(grid);
+        } else {
+            // Render Subjects inside Selected Class
+            const backBtn = document.createElement('button');
+            backBtn.style.cssText = "margin-bottom:8px; background:#1B2559; color:white; padding:6px 12px; border-radius:8px; font-size:11px;";
+            backBtn.innerText = "⬅ Back to All Classes";
+            backBtn.onclick = () => { simSelectedClass = null; renderInteractiveSimulator(); };
+            bodyArea.appendChild(backBtn);
+
+            const classSubjects = Object.values(globalMergedData).filter(i => i.isLive && i.currentClass === simSelectedClass);
+            if (classSubjects.length === 0) {
+                const empty = document.createElement('div');
+                empty.style.cssText = "background:white; padding:20px; border-radius:12px; text-align:center; font-size:12px; color:#64748B;";
+                empty.innerText = `No live subjects published for ${simSelectedClass} yet.`;
+                bodyArea.appendChild(empty);
+            } else {
+                const grid = document.createElement('div');
+                grid.style.cssText = "display:grid; grid-template-columns:1fr 1fr; gap:8px;";
+                classSubjects.forEach((sub, idx) => {
+                    const card = document.createElement('div');
+                    card.style.cssText = "background:white; border-radius:12px; overflow:hidden; border:1.5px solid #05CD99; cursor:pointer;";
+                    card.innerHTML = `
+                        <img src="${sub.imgUrl}" onclick="window.open('${sub.pdfUrl}', '_blank')" style="width:100%; height:78px; object-fit:cover; display:block;">
+                        <div style="padding:6px; font-size:11px; font-weight:700; text-align:center; color:#1B2559;">
+                            ${sub.name} <span onclick="event.stopPropagation(); openRenameModal('${sub.name}', '${sub.currentClass}')">✏️</span>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+
+                    if ((idx + 1) % 4 === 0 || idx === classSubjects.length - 1) {
+                        const adBanner = document.createElement('div');
+                        adBanner.style.cssText = "grid-column: span 2; background:rgba(5,205,153,0.12); border:1.5px dashed #05CD99; border-radius:10px; padding:8px; text-align:center; font-size:10px; font-weight:700; color:#05CD99;";
+                        adBanner.innerText = `📢 [Subject Native Advanced Ad #${Math.ceil((idx + 1) / 4)}]`;
+                        grid.appendChild(adBanner);
+                    }
+                });
+                bodyArea.appendChild(grid);
+            }
+        }
+    } else if (simActiveTab === "VIDEO" || simActiveTab === "LIVE") {
+        const vidId = portalConfig.live_youtube_id || "jfKfPfyJRdk";
+        bodyArea.innerHTML = `
+            <div style="background:white; border-radius:12px; padding:10px;">
+                <div style="font-size:12px; font-weight:700; margin-bottom:6px; display:flex; justify-content:space-between;">
+                    <span>${simActiveTab === "LIVE" ? portalConfig.live_class_title : "🎬 Video Lessons"}</span>
+                    <span onclick="editSimField('live_youtube_id', 'YouTube Video / Live ID')" style="cursor:pointer; color:#4318FF;">✏️ Change ID</span>
+                </div>
+                <iframe width="100%" height="150" src="https://www.youtube.com/embed/${vidId}" frameborder="0" allowfullscreen style="border-radius:8px;"></iframe>
+                <div style="margin-top:8px; font-size:11px; color:#64748B;">
+                    ${simActiveTab === "LIVE" ? "💬 Official YouTube Live Chat loads below this video in the Android app." : "Click '+ Add Video Lesson' on the right panel to add lessons."}
+                </div>
+            </div>
+        `;
+    } else if (simActiveTab.startsWith("CUSTOM_")) {
+        const idx = parseInt(simActiveTab.replace("CUSTOM_", ""), 10);
+        const sec = portalConfig.custom_sections?.[idx];
+        if (sec) {
+            bodyArea.innerHTML = `
+                <div style="background:white; border-radius:12px; padding:8px; height:100%; display:flex; flex-direction:column;">
+                    <div style="font-size:11px; font-weight:700; margin-bottom:6px; display:flex; justify-content:space-between;">
+                        <span>${sec.title}</span>
+                        <a href="${sec.url}" target="_blank" style="color:#4318FF;">Open Full Page ↗</a>
+                    </div>
+                    <iframe src="${sec.url}" style="flex:1; width:100%; border:1px solid #E2E8F0; border-radius:8px;"></iframe>
+                </div>
+            `;
+        }
+    }
+
+    // 4. Populate Sidebar Items inside Simulator Drawer
+    const sbList = document.getElementById('simSidebarItemsList');
+    sbList.innerHTML = '';
+    (portalConfig.sidebar_items || []).forEach((item, idx) => {
+        const row = document.createElement('div');
+        row.style.cssText = "background:#4318FF; color:white; padding:8px 10px; border-radius:10px; font-size:11px; font-weight:600; display:flex; justify-content:space-between; align-items:center;";
+        row.innerHTML = `
+            <span onclick="previewSidebarItem(${idx})" style="cursor:pointer; flex:1;">${item.title}</span>
+            <span style="display:flex; gap:6px;">
+                <span onclick="editSidebarItem(${idx})" style="cursor:pointer;" title="Edit">✏️</span>
+                <span onclick="deleteSidebarItem(${idx})" style="cursor:pointer;" title="Delete">🗑️</span>
+            </span>
+        `;
+        sbList.appendChild(row);
+    });
+
+    // 5. Populate Right Panel Custom Sections List
+    const adminSecList = document.getElementById('adminCustomSectionsList');
+    adminSecList.innerHTML = '';
+    if ((portalConfig.custom_sections || []).length === 0) {
+        adminSecList.innerHTML = `<div style="font-size:12px; color:#94A3B8;">No extra sections added yet. Click below to add "📝 Exam" or any GitHub page!</div>`;
+    } else {
+        portalConfig.custom_sections.forEach((sec, idx) => {
+            const div = document.createElement('div');
+            div.style.cssText = "display:flex; justify-content:space-between; align-items:center; background:#F4F7FE; padding:10px 14px; border-radius:10px; font-size:13px; font-weight:600;";
+            div.innerHTML = `
+                <div>
+                    <div>${sec.title}</div>
+                    <div style="font-size:11px; color:#64748B;">${sec.url}</div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button onclick="editCustomSection(${idx})" style="background:#FFF9E6; color:#D4AC0D; padding:6px 10px; border-radius:8px; font-size:12px;">✏️ Edit</button>
+                    <button onclick="deleteCustomSection(${idx})" style="background:#FDE8E7; color:#EE5D50; padding:6px 10px; border-radius:8px; font-size:12px;">🗑️</button>
+                </div>
+            `;
+            adminSecList.appendChild(div);
+        });
+    }
+}
+
+window.toggleSimSidebar = (show) => {
+    const el = document.getElementById('simSidebarOverlay');
+    if (show) el.classList.remove('hidden');
+    else el.classList.add('hidden');
+};
+
+window.switchSimTab = (tabId) => {
+    simActiveTab = tabId;
+    simSelectedClass = null;
+    renderInteractiveSimulator();
+};
+
+window.openSimClass = (clsKey) => {
+    simSelectedClass = clsKey;
+    renderInteractiveSimulator();
+};
+
+window.toggleSimTheme = () => {
+    simDarkMode = !simDarkMode;
+    const screen = document.getElementById('simPhoneScreen');
+    screen.style.background = simDarkMode
+        ? "linear-gradient(135deg, #0F172A 0%, #1E1B4B 100%)"
+        : "linear-gradient(135deg, #E0C3FC 0%, #8EC5FC 100%)";
+};
+
+window.editSimField = async (fieldKey, label) => {
+    const currentVal = portalConfig[fieldKey] || "";
+    const nextVal = prompt(`Edit ${label}:`, currentVal);
+    if (nextVal === null) return;
+    portalConfig[fieldKey] = nextVal.trim();
+    await savePortalConfigToFirebase();
+    showToast(`${label} updated live in App!`, "success");
+};
+
+window.renameSimClass = async (clsKey) => {
+    const cur = portalConfig.custom_class_names?.[clsKey] || clsKey;
+    const next = prompt(`Edit display name for ${clsKey} (Leave blank to reset to default):`, cur);
+    if (next === null) return;
+    if (!portalConfig.custom_class_names) portalConfig.custom_class_names = {};
+    if (next.trim() === "") delete portalConfig.custom_class_names[clsKey];
+    else portalConfig.custom_class_names[clsKey] = next.trim();
+    await savePortalConfigToFirebase();
+    showToast(`Class display name updated!`, "success");
+};
+
+window.previewSidebarItem = (idx) => {
+    const item = portalConfig.sidebar_items[idx];
+    if (!item) return;
+    if (item.target.startsWith("http://") || item.target.startsWith("https://")) {
+        window.open(item.target, "_blank");
+    } else {
+        alert(`${item.title}\n\n${item.target}`);
+    }
+};
+
+window.addNewSidebarItem = async () => {
+    const title = prompt("Enter New Sidebar Item Name (e.g., 📝 Exam Portal or 📢 Notice):");
+    if (!title || !title.trim()) return;
+    const target = prompt("Enter Link (https://...) OR Notice Text to display when clicked:");
+    if (target === null) return;
+    portalConfig.sidebar_items.push({ title: title.trim(), target: target.trim() });
+    await savePortalConfigToFirebase();
+    showToast("New Sidebar item added to App!", "success");
+};
+
+window.editSidebarItem = async (idx) => {
+    const item = portalConfig.sidebar_items[idx];
+    if (!item) return;
+    const title = prompt("Edit Sidebar Title:", item.title);
+    if (title === null) return;
+    const target = prompt("Edit Connected Link (https://...) or Notice Message:", item.target);
+    if (target === null) return;
+    portalConfig.sidebar_items[idx] = { title: title.trim(), target: target.trim() };
+    await savePortalConfigToFirebase();
+    showToast("Sidebar item updated!", "success");
+};
+
+window.deleteSidebarItem = async (idx) => {
+    if (!confirm("Delete this sidebar item from the app?")) return;
+    portalConfig.sidebar_items.splice(idx, 1);
+    await savePortalConfigToFirebase();
+    showToast("Sidebar item removed.", "error");
+};
+
+window.clickOrEditSocial = async (fieldKey, label) => {
+    const currentUrl = portalConfig[fieldKey] || "https://";
+    const action = prompt(`${label}\nCurrent Link: ${currentUrl}\n\nPaste a new URL to update, or click Cancel to keep it:`, currentUrl);
+    if (action !== null && action.trim() !== "") {
+        portalConfig[fieldKey] = action.trim();
+        await savePortalConfigToFirebase();
+        showToast(`${label} updated in App!`, "success");
+    }
+};
+
+window.addNewCustomSection = async () => {
+    const title = prompt("Enter New Section Tab Name (e.g., 📝 Exam or 🏆 Results):");
+    if (!title || !title.trim()) return;
+    const url = prompt(`Enter GitHub Page URL or Web Link for "${title}":`, "https://excellentinstitute.github.io/");
+    if (!url || !url.trim()) return;
+    if (!Array.isArray(portalConfig.custom_sections)) portalConfig.custom_sections = [];
+    portalConfig.custom_sections.push({ title: title.trim(), url: url.trim() });
+    await savePortalConfigToFirebase();
+    showToast(`New section "${title}" is now live in the Android App!`, "success");
+};
+
+window.editCustomSection = async (idx) => {
+    const sec = portalConfig.custom_sections[idx];
+    if (!sec) return;
+    const title = prompt("Edit Section Tab Title:", sec.title);
+    if (title === null) return;
+    const url = prompt("Edit Connected GitHub Page / URL:", sec.url);
+    if (url === null) return;
+    portalConfig.custom_sections[idx] = { title: title.trim(), url: url.trim() };
+    await savePortalConfigToFirebase();
+    showToast("Section updated!", "success");
+};
+
+window.deleteCustomSection = async (idx) => {
+    if (!confirm("Remove this section from the app?")) return;
+    portalConfig.custom_sections.splice(idx, 1);
+    simActiveTab = "STUDY";
+    await savePortalConfigToFirebase();
+    showToast("Section removed.", "error");
+};
+
+window.addVideoLessonFromPanel = async () => {
+    const title = prompt("Enter Video Lesson Title (e.g., Class 5 Math Chapter 1):");
+    if (!title || !title.trim()) return;
+    const ytUrl = prompt(`Enter YouTube Video URL or ID for "${title}":`);
+    if (!ytUrl || !ytUrl.trim()) return;
+    if (!portalConfig.video_lessons) portalConfig.video_lessons = {};
+    portalConfig.video_lessons[title.trim()] = ytUrl.trim();
+    await savePortalConfigToFirebase();
+    showToast(`Video lesson "${title}" added!`, "success");
+};
 
 // ==========================================
 // 6. RENDER MATERIAL GRID & STATS (TAB 1)
@@ -219,14 +586,12 @@ function createMaterialCardHTML(item, container) {
     const card = document.createElement('div');
     card.className = 'subject-card';
 
-    // 1. Class Dropdown
     let optionsHtml = `<option value="" disabled ${!item.isLive ? 'selected' : ''}>-- Assign a Class --</option>`;
     CLASSES.forEach(cls => {
         const selected = (cls === item.currentClass) ? 'selected' : '';
         optionsHtml += `<option value="${cls}" ${selected}>${cls}</option>`;
     });
 
-    // 2. NEW: Cover Image Dropdown (Specific to each Subject)
     let imageOptionsHtml = `<option value="" disabled ${!item.imgUrl || item.imgUrl.includes('placeholder') ? 'selected' : ''}>-- Select Cover Image --</option>`;
     imageOptionsHtml += `<option value="CUSTOM">🔗 -- Paste Custom URL --</option>`;
     
@@ -237,7 +602,6 @@ function createMaterialCardHTML(item, container) {
         imageOptionsHtml += `<option value="${img.url}" ${isSelected}>${img.name}</option>`;
     });
 
-    // If they manually assigned a custom URL in the past, keep it visible in the list
     if (item.imgUrl && !item.imgUrl.includes('placeholder') && !imgFound) {
         imageOptionsHtml += `<option value="${item.imgUrl}" selected>🔗 Custom Link Attached</option>`;
     }
@@ -255,7 +619,6 @@ function createMaterialCardHTML(item, container) {
         ? `<button class="btn-rename" onclick="openRenameModal('${item.name}', '${item.currentClass}')" title="Rename Subject Display"><i class='bx bx-edit-alt'></i></button>` 
         : '';
 
-    // Smart Handler: Updates preview if offline, instantly saves to database if live!
     const onImageChange = item.isLive 
         ? `onchange="updateLiveSubjectImage('${item.name}', '${item.currentClass}', this.value)"` 
         : `onchange="updateCardImagePreview('${item.name}', this.value)"`;
@@ -400,7 +763,6 @@ window.downloadCroppedImage = () => {
     }, 'image/jpeg', 0.9);
 };
 
-
 // ==========================================
 // 9. ACTIONS: RENAME / PREVIEW / LIVE UPDATE MODALS
 // ==========================================
@@ -459,7 +821,6 @@ window.closePreviewModal = () => {
     document.getElementById('previewModal').classList.add('hidden');
 };
 
-// NEW: Updates UI live so you can preview custom URLs before publishing
 window.updateCardImagePreview = (subjectName, imgUrl) => {
     if (imgUrl === "CUSTOM") {
         imgUrl = prompt(`Paste the custom image URL for ${subjectName}:`);
@@ -487,13 +848,12 @@ window.updateCardImagePreview = (subjectName, imgUrl) => {
     }
 };
 
-// NEW: Directly updates Firebase if the admin changes the image on a Live Subject
 window.updateLiveSubjectImage = async (subjectName, className, imgUrl) => {
     if (imgUrl === "CUSTOM") {
         imgUrl = prompt(`Paste the custom image URL for ${subjectName}:`);
         if (!imgUrl || (!imgUrl.startsWith("http") && !imgUrl.startsWith("https"))) {
             showToast("Invalid URL provided. Must start with http/https.", "error");
-            loadDashboard(); // Resets the dropdown visually
+            loadDashboard();
             return;
         }
     }
@@ -509,7 +869,6 @@ window.updateLiveSubjectImage = async (subjectName, className, imgUrl) => {
         showToast("Failed to update cover.", "error");
     }
 };
-
 
 // ==========================================
 // 10. ACTIONS: PUBLISH / OFFLINE
@@ -528,8 +887,6 @@ window.publishMaterialLive = async (subjectName, pdfUrl) => {
         showToast("Please select a cover image!", "error");
         return;
     }
-    
-    // Fallback safeguard in case Custom wasn't filled out properly
     if (imgUrl === "CUSTOM") {
          showToast("Please provide a valid Custom URL first.", "error");
          return;
@@ -556,7 +913,7 @@ window.publishMaterialLive = async (subjectName, pdfUrl) => {
     } catch (e) {
         showToast("Publish failed. Check permissions.", "error");
     }
-}
+};
 
 window.takeMaterialOffline = async (subjectName, currentClass) => {
     if(confirm(`Remove "${subjectName}" from the app?`)) {
@@ -572,7 +929,7 @@ window.takeMaterialOffline = async (subjectName, currentClass) => {
             showToast("Failed to take offline.", "error");
         }
     }
-}
+};
 
 window.publishClassCover = async (className) => {
     const selectBox = document.getElementById(`coverSelect-${className}`);
@@ -601,7 +958,7 @@ window.publishClassCover = async (className) => {
     } catch (e) {
         showToast("Failed to set class cover.", "error");
     }
-}
+};
 
 window.removeClassCover = async (className) => {
     if(confirm(`Remove the cover image for ${className}? It will turn grey in the app.`)) {
@@ -615,7 +972,7 @@ window.removeClassCover = async (className) => {
             showToast("Failed to remove cover.", "error");
         }
     }
-}
+};
 
 // ==========================================
 // 11. TOAST NOTIFICATION SYSTEM
@@ -635,6 +992,7 @@ function showToast(message, type) {
         setTimeout(() => toast.remove(), 400); 
     }, 4000);
 }
+
 // ==========================================
 // 12. MOVE AI CHUNKS FROM FIREBASE TO GITHUB (DOWNLOAD & DELETE)
 // ==========================================
@@ -661,7 +1019,6 @@ window.moveFirebaseAiChunksToPc = async () => {
             a.click();
             URL.revokeObjectURL(url);
 
-            // Delete from Firebase after downloading ("Move, not copy")
             await deleteDoc(doc(db, "AiPendingChunks", docSnap.id));
         }
 
@@ -669,47 +1026,5 @@ window.moveFirebaseAiChunksToPc = async () => {
     } catch (e) {
         console.error(e);
         showToast("Error moving AI chunks from Firebase.", "error");
-    }
-};
-// ==========================================
-// 13. MANAGE 3 SIDEBARS, YOUTUBE VIDEOS & LIVE CLASS
-// ==========================================
-window.manageAppPortalConfig = async () => {
-    try {
-        const ref = doc(db, "Admin", "AppPortal");
-        const snap = await getDoc(ref);
-        const cur = snap.exists() ? snap.data() : {};
-
-        const liveId = prompt("1. Enter YouTube LIVE Video URL or Video ID:", cur.live_youtube_id || "jfKfPfyJRdk");
-        if (liveId === null) return;
-        const liveTitle = prompt("2. Enter Live Class Title:", cur.live_class_title || "🔴 Live Class (ଲାଇଭ୍ କ୍ଲାସ୍)");
-
-        const s1Body = prompt("3. Sidebar 1 (Notice Board) Text or Link:", cur.sidebar1_body || "ନୂତନ ଶିକ୍ଷାବର୍ଷ ପାଇଁ ସମସ୍ତ ବହି ଉପଲବ୍ଧ ଅଛି।");
-        const s2Body = prompt("4. Sidebar 2 (Exam Routine) Text or Link:", cur.sidebar2_body || "ପ୍ରତି ରବିବାର ଲାଇଭ୍ କ୍ଲାସ୍।");
-        const s3Body = prompt("5. Sidebar 3 (Help Desk) Text or Link:", cur.sidebar3_body || "Excellent Institute, Odisha");
-
-        const newVideoTitle = prompt("6. (Optional) Add a Video Lesson Title (or leave blank):", "");
-        const videoMap = cur.video_lessons || {};
-        if (newVideoTitle && newVideoTitle.trim() !== "") {
-            const newVideoUrl = prompt(`Enter YouTube URL/ID for "${newVideoTitle}":`, "");
-            if (newVideoUrl) videoMap[newVideoTitle.trim()] = newVideoUrl.trim();
-        }
-
-        await setDoc(ref, {
-            live_youtube_id: liveId.trim(),
-            live_class_title: liveTitle || "🔴 Live Class",
-            sidebar1_title: "📢 ସୂଚନା ଫଳକ (Notice Board)",
-            sidebar1_body: s1Body || "",
-            sidebar2_title: "📅 ପରୀକ୍ଷା ସୂଚୀ (Exam Routine)",
-            sidebar2_body: s2Body || "",
-            sidebar3_title: "📞 ସହାୟତା କେନ୍ଦ୍ର (Help Desk)",
-            sidebar3_body: s3Body || "",
-            video_lessons: videoMap
-        }, { merge: true });
-
-        showToast("Sidebars, Video Lessons & Live Class updated in App!", "success");
-    } catch (e) {
-        console.error(e);
-        showToast("Failed to update App Portal settings.", "error");
     }
 };
