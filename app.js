@@ -1301,30 +1301,46 @@ window.moveFirebaseAiChunksToPc = async () => {
         }
 
         let dislikedCount = 0;
-        snap.docs.forEach(d => { if (d.data().needs_improvement === true) dislikedCount++; });
-        const dislikedNote = dislikedCount > 0 ? `\n⚠️ Note: ${dislikedCount} chunk(s) were flagged for improvement (👎) — review those JSONs before uploading to GitHub!` : "";
+        const zip = new window.JSZip();
 
-        if (!confirm(`Found ${snap.size} AI page chunk(s) in Firebase.${dislikedNote}\n\nDownload them to your PC and DELETE them from Firebase?`)) {
+        snap.docs.forEach(docSnap => {
+            const data = docSnap.data();
+            if (data.needs_improvement === true) dislikedCount++;
+
+            // Builds exact GitHub folder tree: chunks/class_10/classxvocationaltourism/p13.json
+            const targetPath = data.github_target_path ||
+                `chunks/${data.class_folder || "class_general"}/${data.book_id || docSnap.id}/p${data.page_number || 1}.json`;
+
+            zip.file(targetPath, JSON.stringify(data, null, 2));
+        });
+
+        const dislikedNote = dislikedCount > 0
+            ? `\n⚠️ ${dislikedCount} chunk(s) were flagged 👎 for review.`
+            : "";
+
+        if (!confirm(`Found ${snap.size} AI page JSON(s) in Firebase.${dislikedNote}\n\nClick OK to download ALL of them inside one structured ZIP file (chunks_export.zip).`)) {
             return;
         }
 
-        for (const docSnap of snap.docs) {
-            const data = docSnap.data();
-            const fileName = `${data.book_id || docSnap.id}_p${data.page_number || 1}.json`;
-            const jsonBlob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-            const url = URL.createObjectURL(jsonBlob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = fileName;
-            a.click();
-            URL.revokeObjectURL(url);
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `chunks_export_${new Date().toISOString().slice(0, 10)}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
 
-            await deleteDoc(doc(db, "AiPendingChunks", docSnap.id));
-        }
-
-        showToast(`Moved ${snap.size} AI JSON file(s) to PC and cleared Firebase! Upload them to your GitHub 'chunks/' folder.`, "success");
+        // Only delete from Firestore AFTER you confirm the ZIP downloaded safely!
+        setTimeout(async () => {
+            if (confirm(`Did 'chunks_export.zip' download safely to your PC?\n\nClick OK to DELETE these ${snap.size} exported document(s) from Firebase Firestore to keep it clean.\nClick Cancel to keep them in Firebase.`)) {
+                for (const docSnap of snap.docs) {
+                    await deleteDoc(doc(db, "AiPendingChunks", docSnap.id));
+                }
+                showToast(`Cleared ${snap.size} exported AI chunk(s) from Firebase! Extract & upload the 'chunks/' folder to GitHub.`, "success");
+            }
+        }, 1200);
     } catch (e) {
         console.error(e);
-        showToast("Error moving AI chunks from Firebase.", "error");
+        showToast("Error exporting AI chunks ZIP from Firebase.", "error");
     }
 };
