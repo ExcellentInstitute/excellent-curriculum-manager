@@ -1300,47 +1300,108 @@ window.moveFirebaseAiChunksToPc = async () => {
             return;
         }
 
+        // 1. Fetch existing chunk paths on GitHub to prevent 'file already exists' surprises!
+        const existingPaths = new Set();
+        try {
+            const treeRes = await fetch("https://api.github.com/repos/ExcellentInstitute/olearning-ai-chunks/git/trees/main?recursive=1");
+            if (treeRes.ok) {
+                const treeJson = await treeRes.json();
+                (treeJson.tree || []).forEach(node => {
+                    if (node.path && node.path.startsWith("chunks/")) existingPaths.add(node.path);
+                });
+            }
+        } catch (_) {}
+
+        let newCount = 0;
+        let mergedCount = 0;
         let dislikedCount = 0;
+        const reportLines = [];
         const zip = new window.JSZip();
 
-        snap.docs.forEach(docSnap => {
-            const data = docSnap.data();
-            if (data.needs_improvement === true) dislikedCount++;
+        for (const docSnap of snap.docs) {
+            const raw = docSnap.data();
+            if (raw.needs_improvement === true) dislikedCount++;
 
-            // Builds exact GitHub folder tree: chunks/class_10/classxvocationaltourism/p13.json
-            const targetPath = data.github_target_path ||
-                `chunks/${data.class_folder || "class_general"}/${data.book_id || docSnap.id}/p${data.page_number || 1}.json`;
+            const classFolder = raw.class_folder || "class_general";
+            const bookId = raw.book_id || docSnap.id;
+            const pageNum = Number(raw.page_number || 1);
+            const paddedPage = `p${String(pageNum).padStart(3, "0")}.json`;
+            const targetPath = raw.github_target_path || `chunks/${classFolder}/${bookId}/${paddedPage}`;
 
-            zip.file(targetPath, JSON.stringify(data, null, 2));
-        });
+            // Strip internal Firebase-only tracking fields before writing clean GitHub JSON
+            const cleanChunk = {
+                chunk_id: raw.chunk_id || `${classFolder}__${bookId}__p${String(pageNum).padStart(3, "0")}`,
+                schema_version: 2,
+                class_folder: classFolder,
+                book_id: bookId,
+                subject_name: raw.subject_name || "",
+                page_number: pageNum,
+                page_summary: raw.page_summary || "",
+                updated_at: raw.updated_at || Date.now()
+            };
+            ["qna", "story", "words", "narrate"].forEach(k => {
+                if (raw[k] && String(raw[k]).trim()) cleanChunk[k] = raw[k];
+            });
+            if (raw.keywords && typeof raw.keywords === "object" && Object.keys(raw.keywords).length > 0) {
+                cleanChunk.keywords = raw.keywords;
+            }
 
-        const dislikedNote = dislikedCount > 0
-            ? `\n⚠️ ${dislikedCount} chunk(s) were flagged 👎 for review.`
-            : "";
-
-        if (!confirm(`Found ${snap.size} AI page JSON(s) in Firebase.${dislikedNote}\n\nClick OK to download ALL of them inside one structured ZIP file (chunks_export.zip).`)) {
-            return;
+            // If file already exists on GitHub, fetch & deep-merge so existing modes/keywords are preserved!
+            if (existingPaths.has(targetPath)) {
+                try {
+                    const oldRes = await fetch(`https://raw.githubusercontent.com/ExcellentInstitute/olearning-ai-chunks/main/${targetPath}`);
+                    if (oldRes.ok) {
+                        const oldJson = await oldRes.json();
+                        ["qna", "story", "words", "narrate"].forEach(k => {
+                            if (!cleanChunk[k] && oldJson[k]) cleanChunk[k] = oldJson[k];
+                        });
+                        if (oldJson.keywords || cleanChunk.keywords) {
+                            cleanChunk.keywords = { ...(oldJson.keywords || {}), ...(cleanChunk.keywords || {}) };
+                        }
+                    }
+                } catch (_) {}
+                zip.file(`MERGE_REPLACE/${targetPath}`, JSON.stringify(cleanChunk, null, 2));
+                reportLines.push(`[MERGED EXISTING] ${targetPath}`);
+                mergedCount++;
+            } else {
+                zip.file(`NEW_UPLOAD/${targetPath}`, JSON.stringify(cleanChunk, null, 2));
+                reportLines.push(`[NEW FILE]        ${targetPath}`);
+                newCount++;
+            }
         }
+
+        zip.file("UPLOAD_GUIDE.txt",
+            `Excellent Institute AI Chunks Export (${new Date().toISOString()})\n` +
+            `New Files: ${newCount} | Merged Existing Files: ${mergedCount} | Flagged Disliked: ${dislikedCount}\n\n` +
+            `HOW TO UPLOAD WITHOUT CONFLICTS:\n` +
+            `1. NEW_UPLOAD/chunks/... -> Drag & drop directly into your GitHub repo (zero conflicts!).\n` +
+            `2. MERGE_REPLACE/chunks/... -> Already merged with old GitHub content; replace existing files via GitHub Desktop or git push.\n\n` +
+            reportLines.join("\n")
+        );
+
+        const summaryMsg = `Found ${snap.size} chunk(s): ${newCount} Brand New, ${mergedCount} Merged Updates` +
+            (dislikedCount > 0 ? `, ⚠️ ${dislikedCount} flagged 👎` : "") +
+            `\n\nDownload clean ZIP now?`;
+        if (!confirm(summaryMsg)) return;
 
         const zipBlob = await zip.generateAsync({ type: "blob" });
         const url = URL.createObjectURL(zipBlob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `chunks_export_${new Date().toISOString().slice(0, 10)}.zip`;
+        a.download = `chunks_clean_export_${new Date().toISOString().slice(0, 10)}.zip`;
         a.click();
         URL.revokeObjectURL(url);
 
-        // Only delete from Firestore AFTER you confirm the ZIP downloaded safely!
         setTimeout(async () => {
-            if (confirm(`Did 'chunks_export.zip' download safely to your PC?\n\nClick OK to DELETE these ${snap.size} exported document(s) from Firebase Firestore to keep it clean.\nClick Cancel to keep them in Firebase.`)) {
+            if (confirm(`Did the ZIP download cleanly?\nClick OK to DELETE these ${snap.size} exported doc(s) from Firestore.`)) {
                 for (const docSnap of snap.docs) {
                     await deleteDoc(doc(db, "AiPendingChunks", docSnap.id));
                 }
-                showToast(`Cleared ${snap.size} exported AI chunk(s) from Firebase! Extract & upload the 'chunks/' folder to GitHub.`, "success");
+                showToast(`Cleared ${snap.size} chunk(s) from Firestore!`, "success");
             }
         }, 1200);
     } catch (e) {
         console.error(e);
-        showToast("Error exporting AI chunks ZIP from Firebase.", "error");
+        showToast("Error exporting AI chunks ZIP.", "error");
     }
 };
