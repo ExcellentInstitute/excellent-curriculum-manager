@@ -38,6 +38,8 @@ let portalConfig = {
     footer_brand_text: "🦊 Excellent Institute • Odisha",
     live_youtube_id: "jfKfPfyJRdk",
     live_class_title: "🔴 Live Class (ଲାଇଭ୍ କ୍ଲାସ୍)",
+    live_class_description: "Join our interactive Odisha Board Live Revision Class & ask doubts in YouTube Live Chat.",
+    pdf_backup_mirror_base: "",
     social_youtube: "https://www.youtube.com",
     social_instagram: "https://www.instagram.com",
     social_facebook: "https://www.facebook.com",
@@ -49,8 +51,23 @@ let portalConfig = {
         { title: "📞 ସହାୟତା କେନ୍ଦ୍ର (Help Desk)", target: "Excellent Institute, Odisha • କୌଣସି ସନ୍ଦେହ ଥିଲେ Foxy AI କୁ ପଚାରନ୍ତୁ।" }
     ],
     custom_sections: [],
+    video_playlists: [],
+    past_live_classes: [],
     video_lessons: {}
 };
+
+function escapeJs(str) {
+    return String(str || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+}
+
+function extractYoutubeId(raw) {
+    const t = String(raw || "").trim();
+    if (t.includes("youtu.be/")) return t.split("youtu.be/")[1].split(/[?&]/)[0];
+    if (t.includes("v=")) return t.split("v=")[1].split(/[?&]/)[0];
+    if (t.includes("live/")) return t.split("live/")[1].split(/[?&]/)[0];
+    if (t.includes("embed/")) return t.split("embed/")[1].split(/[?&]/)[0];
+    return t;
+}
 let simActiveTab = "HOME";
 let simSelectedClass = null;
 let simDarkMode = false;
@@ -119,6 +136,9 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
     }
 });
 
+document.getElementById('passInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('loginBtn').click();
+});
 document.getElementById('logoutBtn').addEventListener('click', () => window.location.reload());
 
 // ==========================================
@@ -141,7 +161,19 @@ async function loadDashboard() {
                 ];
             }
             if (!Array.isArray(portalConfig.custom_sections)) portalConfig.custom_sections = [];
+            if (!Array.isArray(portalConfig.video_playlists)) portalConfig.video_playlists = [];
+            if (!Array.isArray(portalConfig.past_live_classes)) portalConfig.past_live_classes = [];
             if (!portalConfig.custom_class_names) portalConfig.custom_class_names = {};
+
+            // Auto-migrate legacy video_lessons map entries into video_playlists if not already present
+            if (portalConfig.video_lessons && typeof portalConfig.video_lessons === 'object') {
+                Object.entries(portalConfig.video_lessons).forEach(([t, id]) => {
+                    const clean = extractYoutubeId(id);
+                    if (!portalConfig.video_playlists.some(v => extractYoutubeId(v.video_id) === clean)) {
+                        portalConfig.video_playlists.push({ title: t, video_id: clean, playlist: "General", description: "" });
+                    }
+                });
+            }
         }
 
         const liveData = {};
@@ -289,13 +321,32 @@ function renderInteractiveSimulator() {
     bodyArea.innerHTML = '';
 
     if (simActiveTab === "HOME") {
-        // Blank Home Screen (matching Android app default)
         bodyArea.innerHTML = `
-            <div style="height:100%; display:flex; align-items:center; justify-content:center; text-align:center; color:rgba(27,37,89,0.45); font-size:12px; padding:24px;">
-                <div>
-                    <div style="font-size:28px; margin-bottom:6px;">🏠</div>
-                    <b>Blank Home Screen</b><br>
-                    Tap <b>☰</b> at top-left to slide out the Navigation Drawer!
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                <div style="background:linear-gradient(135deg,#4318FF,#0052CC); color:white; padding:12px; border-radius:14px;">
+                    <div style="font-weight:700; font-size:13px;">Welcome, Student! 👋</div>
+                    <div style="font-size:10px; opacity:0.9; margin-top:2px;">Class 1–10 Books, Playlists & Foxy AI</div>
+                </div>
+                <div style="background:white; padding:10px; border-radius:12px; border:1.5px solid #4318FF; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-size:9px; font-weight:700; color:#4318FF;">🎓 MY CLASS</div>
+                        <div style="font-size:11px; font-weight:700; color:#1B2559;">Select Class (1–10)</div>
+                    </div>
+                    <span onclick="switchSimTab('STUDY')" style="background:#4318FF; color:white; font-size:10px; padding:4px 8px; border-radius:8px; cursor:pointer;">Books ▸</span>
+                </div>
+                <div style="background:white; padding:10px; border-radius:12px; border:1.5px solid #05CD99; font-size:11px; color:#1B2559;">
+                    <div style="font-size:9px; font-weight:700; color:#05CD99;">📖 CONTINUE READING & ⭐ BOOKMARKS</div>
+                    Auto-saved locally on student's phone
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                    <div onclick="switchSimTab('STUDY')" style="background:white; padding:10px; border-radius:12px; border:1.5px solid #4318FF; cursor:pointer; font-size:11px; font-weight:700; color:#1B2559;">📚 All Classes</div>
+                    <div onclick="switchSimTab('VIDEO')" style="background:white; padding:10px; border-radius:12px; border:1.5px solid #05CD99; cursor:pointer; font-size:11px; font-weight:700; color:#1B2559;">🎬 Video Playlists</div>
+                    <div onclick="switchSimTab('LIVE')" style="background:white; padding:10px; border-radius:12px; border:1.5px solid #EE5D50; cursor:pointer; font-size:11px; font-weight:700; color:#1B2559;">🔴 Live & Past</div>
+                    <div onclick="toggleSimSidebar(true)" style="background:white; padding:10px; border-radius:12px; border:1.5px solid #FF9800; cursor:pointer; font-size:11px; font-weight:700; color:#1B2559;">📢 Notices</div>
+                </div>
+                <div style="background:linear-gradient(90deg,#FF8F00,#F4511E); color:white; padding:10px; border-radius:12px;">
+                    <div style="font-size:11px; font-weight:700;">👑 Student Pro Pass (₹100)</div>
+                    <div style="font-size:9px; opacity:0.95;">Offline Books • Zero Ads • Priority Foxy AI</div>
                 </div>
             </div>
         `;
@@ -363,15 +414,49 @@ function renderInteractiveSimulator() {
                 bodyArea.appendChild(grid);
             }
         }
-    } else if (simActiveTab === "VIDEO" || simActiveTab === "LIVE") {
-        const vidId = portalConfig.live_youtube_id || "jfKfPfyJRdk";
-        bodyArea.innerHTML = `
-            <div style="background:white; border-radius:12px; padding:10px;">
-                <div style="font-size:12px; font-weight:700; margin-bottom:6px; display:flex; justify-content:space-between;">
-                    <span>${simActiveTab === "LIVE" ? portalConfig.live_class_title : "🎬 Video Lessons"}</span>
-                    <span onclick="editSimField('live_youtube_id', 'YouTube Video / Live ID')" style="cursor:pointer; color:#4318FF;">✏️ Change ID</span>
+    } else if (simActiveTab === "VIDEO") {
+        const list = portalConfig.video_playlists || [];
+        const firstId = list.length > 0 ? extractYoutubeId(list[0].video_id) : "";
+        let cardsHtml = list.map(v => {
+            const cid = extractYoutubeId(v.video_id);
+            return `
+                <div style="display:flex; gap:8px; background:white; padding:6px; border-radius:10px; align-items:center; border:1px solid #E2E8F0;">
+                    <img src="https://img.youtube.com/vi/${cid}/hqdefault.jpg" style="width:76px; height:46px; object-fit:cover; border-radius:6px;">
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-size:9px; font-weight:700; color:#05CD99;">📁 ${v.playlist || 'General'}</div>
+                        <div style="font-size:11px; font-weight:700; color:#1B2559; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${v.title}</div>
+                        <div style="font-size:9px; color:#64748B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${v.description || ''}</div>
+                    </div>
                 </div>
-                <iframe width="100%" height="150" src="https://www.youtube.com/embed/${vidId}" frameborder="0" allowfullscreen style="border-radius:8px;"></iframe>
+            `;
+        }).join('');
+        bodyArea.innerHTML = `
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                ${firstId ? `<iframe width="100%" height="145" src="https://www.youtube.com/embed/${firstId}" frameborder="0" allowfullscreen style="border-radius:10px; background:#000;"></iframe>` : ''}
+                ${cardsHtml || `<div style="background:white; padding:16px; border-radius:10px; text-align:center; font-size:11px; color:#64748B;">No videos added yet. Use '+ Add Video to Playlist' on the right!</div>`}
+            </div>
+        `;
+    } else if (simActiveTab === "LIVE") {
+        const liveId = extractYoutubeId(portalConfig.live_youtube_id || "jfKfPfyJRdk");
+        const pastHtml = (portalConfig.past_live_classes || []).map(p => {
+            const pid = extractYoutubeId(p.video_id);
+            return `
+                <div style="display:flex; gap:8px; background:white; padding:6px; border-radius:10px; align-items:center; border:1px solid #E2E8F0;">
+                    <img src="https://img.youtube.com/vi/${pid}/hqdefault.jpg" style="width:70px; height:42px; object-fit:cover; border-radius:6px;">
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-size:9px; font-weight:700; color:#4318FF;">📼 Past Live</div>
+                        <div style="font-size:11px; font-weight:700; color:#1B2559; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${p.title}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        bodyArea.innerHTML = `
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                <div style="background:white; border-radius:12px; padding:8px; border:1.5px solid #EE5D50;">
+                    <div style="font-size:11px; font-weight:700; color:#EE5D50; margin-bottom:4px;">🔴 LIVE NOW — ${portalConfig.live_class_title || 'Live Class'}</div>
+                    <iframe width="100%" height="140" src="https://www.youtube.com/embed/${liveId}" frameborder="0" allowfullscreen style="border-radius:8px; background:#000;"></iframe>
+                </div>
+                ${pastHtml}
             </div>
         `;
     } else if (simActiveTab.startsWith("CUSTOM_")) {
@@ -427,6 +512,54 @@ function renderInteractiveSimulator() {
             `;
             adminSecList.appendChild(div);
         });
+    }
+
+    // 6. Populate Right Panel Video Playlists List
+    const vidListEl = document.getElementById('adminVideoPlaylistsList');
+    if (vidListEl) {
+        vidListEl.innerHTML = '';
+        if ((portalConfig.video_playlists || []).length === 0) {
+            vidListEl.innerHTML = `<div style="font-size:12px; color:#94A3B8;">No playlist videos added yet.</div>`;
+        } else {
+            portalConfig.video_playlists.forEach((v, idx) => {
+                const cid = extractYoutubeId(v.video_id);
+                const row = document.createElement('div');
+                row.style.cssText = "display:flex; gap:10px; align-items:center; background:#F4F7FE; padding:8px 10px; border-radius:10px;";
+                row.innerHTML = `
+                    <img src="https://img.youtube.com/vi/${cid}/default.jpg" style="width:54px; height:40px; object-fit:cover; border-radius:6px;">
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-size:11px; font-weight:700; color:#05CD99;">📁 ${v.playlist || 'General'}</div>
+                        <div style="font-size:12px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${v.title}</div>
+                    </div>
+                    <button onclick="deletePlaylistVideo(${idx})" style="background:#FDE8E7; color:#EE5D50; padding:6px 8px; border-radius:8px; font-size:12px;">🗑️</button>
+                `;
+                vidListEl.appendChild(row);
+            });
+        }
+    }
+
+    // 7. Populate Right Panel Past Live Classes List
+    const pastListEl = document.getElementById('adminPastLivesList');
+    if (pastListEl) {
+        pastListEl.innerHTML = '';
+        if ((portalConfig.past_live_classes || []).length === 0) {
+            pastListEl.innerHTML = `<div style="font-size:12px; color:#94A3B8;">No past live classes archived yet.</div>`;
+        } else {
+            portalConfig.past_live_classes.forEach((p, idx) => {
+                const pid = extractYoutubeId(p.video_id);
+                const row = document.createElement('div');
+                row.style.cssText = "display:flex; gap:10px; align-items:center; background:#F4F7FE; padding:8px 10px; border-radius:10px;";
+                row.innerHTML = `
+                    <img src="https://img.youtube.com/vi/${pid}/default.jpg" style="width:54px; height:40px; object-fit:cover; border-radius:6px;">
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-size:12px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${p.title}</div>
+                        <div style="font-size:10px; color:#64748B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${p.description || ''}</div>
+                    </div>
+                    <button onclick="deletePastLive(${idx})" style="background:#FDE8E7; color:#EE5D50; padding:6px 8px; border-radius:8px; font-size:12px;">🗑️</button>
+                `;
+                pastListEl.appendChild(row);
+            });
+        }
     }
 }
 
@@ -557,20 +690,156 @@ window.editCustomSection = async (idx) => {
 window.deleteCustomSection = async (idx) => {
     if (!confirm("Remove this section from the app?")) return;
     portalConfig.custom_sections.splice(idx, 1);
-    simActiveTab = "STUDY";
+    simActiveTab = "HOME";
     await savePortalConfigToFirebase();
     showToast("Section removed.", "error");
 };
 
-window.addVideoLessonFromPanel = async () => {
-    const title = prompt("Enter Video Lesson Title (e.g., Class 5 Math Chapter 1):");
-    if (!title || !title.trim()) return;
-    const ytUrl = prompt(`Enter YouTube Video URL or ID for "${title}":`);
+async function fetchYouTubeTitleAuto(videoId) {
+    try {
+        const res = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
+        if (res.ok) {
+            const data = await res.json();
+            return data.title || "";
+        }
+    } catch (_) {}
+    return "";
+}
+
+window.addVideoToPlaylist = async () => {
+    const ytUrl = prompt("1. Paste YouTube Video URL or Video ID:");
     if (!ytUrl || !ytUrl.trim()) return;
-    if (!portalConfig.video_lessons) portalConfig.video_lessons = {};
-    portalConfig.video_lessons[title.trim()] = ytUrl.trim();
+    const cleanId = extractYoutubeId(ytUrl);
+
+    const autoTitle = await fetchYouTubeTitleAuto(cleanId);
+    const title = prompt("2. Video Title (auto-fetched from YouTube):", autoTitle || "Class Video Lesson");
+    if (!title || !title.trim()) return;
+
+    const playlist = prompt("3. Playlist Name (e.g., Class 10 Math, Class 5 Science):", "General");
+    if (playlist === null) return;
+
+    const desc = prompt("4. Short Video Description (1–2 lines):", "Watch this lesson for step-by-step Odisha Board explanation.");
+    if (desc === null) return;
+
+    if (!Array.isArray(portalConfig.video_playlists)) portalConfig.video_playlists = [];
+    portalConfig.video_playlists.unshift({
+        title: title.trim(),
+        video_id: cleanId,
+        playlist: playlist.trim() || "General",
+        description: desc.trim()
+    });
     await savePortalConfigToFirebase();
-    showToast(`Video lesson "${title}" added!`, "success");
+    showToast(`Added "${title.trim()}" to playlist "${playlist.trim() || 'General'}"!`, "success");
+};
+
+window.deletePlaylistVideo = async (idx) => {
+    if (!confirm("Remove this video from the app?")) return;
+    portalConfig.video_playlists.splice(idx, 1);
+    await savePortalConfigToFirebase();
+    showToast("Video removed.", "error");
+};
+
+window.goLiveAndArchivePrevious = async () => {
+    const newLiveUrl = prompt("1. Paste NEW YouTube Live Stream URL or Video ID:", "");
+    if (!newLiveUrl || !newLiveUrl.trim()) return;
+    const cleanNewId = extractYoutubeId(newLiveUrl);
+
+    const autoTitle = await fetchYouTubeTitleAuto(cleanNewId);
+    const newTitle = prompt("2. New Live Class Title:", autoTitle || "🔴 Live Class (ଲାଇଭ୍ କ୍ଲାସ୍)");
+    if (!newTitle) return;
+    const newDesc = prompt("3. Live Class Description:", portalConfig.live_class_description || "Live interactive doubt-clearing session.");
+
+    // Automatically archive the previous live video into Past Live Classes
+    const prevId = extractYoutubeId(portalConfig.live_youtube_id || "");
+    if (prevId && prevId !== cleanNewId) {
+        if (!Array.isArray(portalConfig.past_live_classes)) portalConfig.past_live_classes = [];
+        const alreadyArchived = portalConfig.past_live_classes.some(p => extractYoutubeId(p.video_id) === prevId);
+        if (!alreadyArchived) {
+            portalConfig.past_live_classes.unshift({
+                title: (portalConfig.live_class_title || "Past Live Class").replace("🔴", "").trim(),
+                video_id: prevId,
+                description: portalConfig.live_class_description || "Recorded Live Session"
+            });
+        }
+    }
+
+    portalConfig.live_youtube_id = cleanNewId;
+    portalConfig.live_class_title = newTitle.trim();
+    portalConfig.live_class_description = (newDesc || "").trim();
+
+    await savePortalConfigToFirebase();
+    showToast("New Live Class is pinned on top & previous stream archived!", "success");
+};
+
+window.addPastLiveManually = async () => {
+    const ytUrl = prompt("1. Paste Past Live Recording YouTube URL or ID:");
+    if (!ytUrl || !ytUrl.trim()) return;
+    const cleanId = extractYoutubeId(ytUrl);
+    const autoTitle = await fetchYouTubeTitleAuto(cleanId);
+    const title = prompt("2. Recording Title:", autoTitle || "Past Live Revision Class");
+    if (!title) return;
+    const desc = prompt("3. Short Description:", "Recorded Live Class");
+
+    if (!Array.isArray(portalConfig.past_live_classes)) portalConfig.past_live_classes = [];
+    portalConfig.past_live_classes.unshift({
+        title: title.trim(),
+        video_id: cleanId,
+        description: (desc || "").trim()
+    });
+    await savePortalConfigToFirebase();
+    showToast("Past Live recording added!", "success");
+};
+
+window.deletePastLive = async (idx) => {
+    if (!confirm("Remove this past live recording?")) return;
+    portalConfig.past_live_classes.splice(idx, 1);
+    await savePortalConfigToFirebase();
+    showToast("Past Live removed.", "error");
+};
+
+window.manageAiConfigAndProSwitch = async () => {
+    try {
+        const ref = doc(db, "Admin", "AiConfig");
+        const snap = await getDoc(ref);
+        const cur = snap.exists() ? snap.data() : {};
+
+        const curSwitch = cur.pro_limit_switch === true;
+        const switchInput = prompt(
+            `1. Pro Daily Quota Switch (Currently: ${curSwitch ? "ON (20 Free / 100 Pro)" : "OFF (Training Mode)"})\nType "ON" to activate limits, or "OFF" to keep deactivated:`,
+            curSwitch ? "ON" : "OFF"
+        );
+        if (switchInput === null) return;
+
+        const freeKey = prompt("2. Remote Free Gemini API Key (optional override, leave blank to use APK key):", cur.free_gemini_key || "");
+        if (freeKey === null) return;
+
+        const proKey = prompt("3. Remote Pro Gemini API Key (for ₹100 Pro users only, optional):", cur.pro_gemini_key || "");
+        if (proKey === null) return;
+
+        await setDoc(ref, {
+            pro_limit_switch: switchInput.trim().toUpperCase() === "ON",
+            free_gemini_key: freeKey.trim(),
+            pro_gemini_key: proKey.trim(),
+            updated_at: Date.now()
+        }, { merge: true });
+
+        showToast("Remote Foxy AI Config & Pro Switch updated!", "success");
+    } catch (e) {
+        console.error(e);
+        showToast("Failed to update AI Config.", "error");
+    }
+};
+
+window.setBackupPdfMirror = async () => {
+    const cur = portalConfig.pdf_backup_mirror_base || "";
+    const next = prompt(
+        "Optional Free Backup PDF Mirror Base URL (e.g., Cloudflare R2 public URL https://pub-xxxx.r2.dev).\nLeave blank to use automatic GitHub Pages + jsDelivr CDN + Raw mirrors:",
+        cur
+    );
+    if (next === null) return;
+    portalConfig.pdf_backup_mirror_base = next.trim();
+    await savePortalConfigToFirebase();
+    showToast("Backup PDF mirror setting saved!", "success");
 };
 
 // ==========================================
@@ -632,18 +901,23 @@ function createMaterialCardHTML(item, container) {
         ? `<div class="status-badge status-live"><i class='bx bx-broadcast'></i> LIVE IN APP</div>` 
         : `<div class="status-badge status-offline"><i class='bx bx-archive-in'></i> OFFLINE</div>`;
 
-    const actionsHtml = item.isLive
-        ? `<button class="btn-offline" onclick="takeMaterialOffline('${item.name}', '${item.currentClass}')"><i class='bx bx-cloud-download'></i> Offline</button>`
-        : `<button class="btn-publish" onclick="publishMaterialLive('${item.name}', '${item.pdfUrl}')"><i class='bx bx-cloud-upload'></i> Publish</button>`;
+    const safeName = escapeJs(item.name);
+    const safeClass = escapeJs(item.currentClass);
+    const safePdf = escapeJs(item.pdfUrl);
+    const safeImg = escapeJs(item.imgUrl);
 
-    const previewBtn = `<button class="btn-preview" onclick="previewMaterial('${item.name}', '${item.imgUrl}')" title="Preview App Layout"><i class='bx bx-mobile-alt'></i></button>`;
+    const actionsHtml = item.isLive
+        ? `<button class="btn-offline" onclick="takeMaterialOffline('${safeName}', '${safeClass}')"><i class='bx bx-cloud-download'></i> Offline</button>`
+        : `<button class="btn-publish" onclick="publishMaterialLive('${safeName}', '${safePdf}')"><i class='bx bx-cloud-upload'></i> Publish</button>`;
+
+    const previewBtn = `<button class="btn-preview" onclick="previewMaterial('${safeName}', '${safeImg}')" title="Preview App Layout"><i class='bx bx-mobile-alt'></i></button>`;
     const renameBtn = item.isLive 
-        ? `<button class="btn-rename" onclick="openRenameModal('${item.name}', '${item.currentClass}')" title="Rename Subject Display"><i class='bx bx-edit-alt'></i></button>` 
+        ? `<button class="btn-rename" onclick="openRenameModal('${safeName}', '${safeClass}')" title="Rename Subject Display"><i class='bx bx-edit-alt'></i></button>` 
         : '';
 
     const onImageChange = item.isLive 
-        ? `onchange="updateLiveSubjectImage('${item.name}', '${item.currentClass}', this.value)"` 
-        : `onchange="updateCardImagePreview('${item.name}', this.value)"`;
+        ? `onchange="updateLiveSubjectImage('${safeName}', '${safeClass}', this.value)"` 
+        : `onchange="updateCardImagePreview('${safeName}', this.value)"`;
 
     card.innerHTML = `
         <div class="card-image-container">
@@ -1026,7 +1300,11 @@ window.moveFirebaseAiChunksToPc = async () => {
             return;
         }
 
-        if (!confirm(`Found ${snap.size} AI page chunk(s) in Firebase. Download them to your PC and DELETE them from Firebase?`)) {
+        let dislikedCount = 0;
+        snap.docs.forEach(d => { if (d.data().needs_improvement === true) dislikedCount++; });
+        const dislikedNote = dislikedCount > 0 ? `\n⚠️ Note: ${dislikedCount} chunk(s) were flagged for improvement (👎) — review those JSONs before uploading to GitHub!` : "";
+
+        if (!confirm(`Found ${snap.size} AI page chunk(s) in Firebase.${dislikedNote}\n\nDownload them to your PC and DELETE them from Firebase?`)) {
             return;
         }
 
