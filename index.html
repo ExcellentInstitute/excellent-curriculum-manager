@@ -39,7 +39,7 @@
                 <div class="brand-logo small"><i class='bx bxs-graduation'></i></div>
                 <div>
                     <h3>Command Center</h3>
-                    <span class="version-tag">Deployment Engine v6.0 (Slide Drawer + Blank Home)</span>
+                    <span class="version-tag">Deployment Engine v7.0 (Playlists + Live Archive + AI Control)</span>
                 </div>
             </div>
             <div class="nav-actions">
@@ -237,20 +237,46 @@
                         </div>
 
                         <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-soft);">
-                            <h3 style="margin-bottom: 6px;">🎬 Live Class & Video Lessons Manager</h3>
-                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
-                                Set the active YouTube Live Stream ID and add recorded video lessons.
+                            <h3 style="margin-bottom: 6px;">🎬 Video Playlists Manager</h3>
+                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+                                Add YouTube videos organized by playlist (e.g., Class 10 Math). Thumbnails and titles load directly from YouTube!
                             </p>
+                            <div id="adminVideoPlaylistsList" style="display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; margin-bottom: 12px;"></div>
+                            <button class="btn-secondary" onclick="addVideoToPlaylist()" style="width: 100%; border-color:#05CD99; color:#05CD99;">
+                                <i class='bx bx-video-plus'></i> + Add Video to Playlist
+                            </button>
+                        </div>
+
+                        <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-soft);">
+                            <h3 style="margin-bottom: 6px;">🔴 Live Class & Past Live Archive</h3>
+                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+                                Active Live video stays pinned at the top of Live Classes. Going live automatically archives the previous stream to Past Live Classes!
+                            </p>
+                            <div id="adminPastLivesList" style="display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto; margin-bottom: 12px;"></div>
                             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                                <button class="btn-secondary" onclick="editSimField('live_youtube_id', 'YouTube Live Stream URL or Video ID')" style="border-color:#EE5D50; color:#EE5D50;">
-                                    <i class='bx bx-broadcast'></i> Set Live Stream ID
+                                <button class="btn-secondary" onclick="goLiveAndArchivePrevious()" style="flex: 1; border-color:#EE5D50; color:#EE5D50;">
+                                    <i class='bx bx-broadcast'></i> Go Live (Archive Old)
                                 </button>
-                                <button class="btn-secondary" onclick="addVideoLessonFromPanel()" style="border-color:#05CD99; color:#05CD99;">
-                                    <i class='bx bx-video-plus'></i> Add Video Lesson
+                                <button class="btn-secondary" onclick="addPastLiveManually()" style="flex: 1; border-color:#4318FF; color:#4318FF;">
+                                    <i class='bx bx-history'></i> + Add Past Live
                                 </button>
                             </div>
                         </div>
 
+                        <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-soft);">
+                            <h3 style="margin-bottom: 6px;">🦊 Foxy AI Config & PDF Backup Mirror</h3>
+                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+                                Control the remote Pro daily limit switch, swap Gemini API keys without updating the APK, or link a free Cloudflare R2 PDF backup mirror.
+                            </p>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <button class="btn-secondary" onclick="manageAiConfigAndProSwitch()" style="flex: 1; border-color:#FF8F00; color:#FF8F00;">
+                                    <i class='bx bx-bot'></i> AI Keys & Pro Switch
+                                </button>
+                                <button class="btn-secondary" onclick="setBackupPdfMirror()" style="flex: 1; border-color:#3B82F6; color:#3B82F6;">
+                                    <i class='bx bx-cloud'></i> Backup PDF Mirror
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
