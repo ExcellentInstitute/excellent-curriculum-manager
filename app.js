@@ -19,6 +19,7 @@ const firebaseConfig = {
 
 const GITHUB_OWNER = "ExcellentInstitute"; 
 const GITHUB_REPO = "excellent-curriculum-manager";
+const WORKER_NOTIFY_URL = "https://foxy-olearning-proxy.pkb9658-pkb-pkb.workers.dev/admin/notify";
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -29,6 +30,8 @@ const CLASSES = ["ପ୍ରଥମ ଶ୍ରେଣୀ", "ଦ୍ୱିତୀୟ �
 let globalMergedData = {};
 let liveClassCovers = {};
 let allGithubImages = [];
+let publishedExamPapers = [];
+let activeImageFormatFilter = "ALL";
 let portalConfig = {
     header_title_odia: "ଶ୍ରେଣୀ ଚୟନ କରନ୍ତୁ",
     header_title_en: "Select Your Class",
@@ -183,7 +186,12 @@ async function loadDashboard() {
                 const data = docSnap.data();
                 if (data.subjects) {
                     data.subjects.forEach(sub => {
-                        liveData[sub] = { class: cls, pdf: data.pdf_links?.[sub] || "", img: data.image_links?.[sub] || "" };
+                        liveData[sub] = {
+                            class: cls,
+                            pdf: data.pdf_links?.[sub] || "",
+                            img: data.image_links?.[sub] || "",
+                            edition: data.book_editions?.[sub] || "2026_v1"
+                        };
                     });
                 }
             }
@@ -191,6 +199,14 @@ async function loadDashboard() {
 
         const classCoversSnap = await getDoc(doc(db, "Admin", "ClassCovers"));
         liveClassCovers = classCoversSnap.exists() ? classCoversSnap.data() : {};
+
+        // Load Published Exam Papers from Firestore
+        publishedExamPapers = [];
+        try {
+            const examSnap = await getDocs(collection(db, "ExamPapers"));
+            examSnap.forEach(d => publishedExamPapers.push({ id: d.id, ...d.data() }));
+            publishedExamPapers.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+        } catch (_) {}
 
         const githubData = {};
         allGithubImages = []; 
@@ -212,19 +228,23 @@ async function loadDashboard() {
         if (Array.isArray(files)) {
             files.forEach(file => {
                 const url = `https://${GITHUB_OWNER}.github.io/${GITHUB_REPO}/${file.path}`;
+                const low = file.name.toLowerCase();
                 let subjectName = "";
 
-                if (file.name.endsWith('.jpg') || file.name.endsWith('.png') || file.name.endsWith('.jpeg')) {
-                    allGithubImages.push({ name: file.name, url: url });
+                if (low.endsWith('.webp') || low.endsWith('.png') || low.endsWith('.jpg') || low.endsWith('.jpeg')) {
+                    const fmt = low.endsWith('.webp') ? 'webp' : low.endsWith('.png') ? 'png' : 'jpeg';
+                    allGithubImages.push({ name: file.name, url: url, format: fmt });
                 }
 
-                if (file.name.endsWith('.pdf')) {
-                    subjectName = file.name.replace('.pdf', '');
-                    if(!githubData[subjectName]) githubData[subjectName] = {};
+                if (low.endsWith('.pdf')) {
+                    subjectName = file.name.replace(/\.pdf$/i, '');
+                    if (!githubData[subjectName]) githubData[subjectName] = {};
                     githubData[subjectName].pdf = url;
-                } else if (file.name.includes('-cover')) {
-                    subjectName = file.name.split('-cover')[0];
-                    if(!githubData[subjectName]) githubData[subjectName] = {};
+                } else if (low.includes('-cover') || low.endsWith('.webp') || low.endsWith('.png') || low.endsWith('.jpg') || low.endsWith('.jpeg')) {
+                    subjectName = low.includes('-cover')
+                        ? file.name.split('-cover')[0]
+                        : file.name.replace(/\.(webp|png|jpg|jpeg)$/i, '');
+                    if (!githubData[subjectName]) githubData[subjectName] = {};
                     githubData[subjectName].img = url;
                 }
             });
@@ -236,19 +256,27 @@ async function loadDashboard() {
             globalMergedData[liveSubject] = {
                 name: liveSubject,
                 pdfUrl: liveData[liveSubject].pdf,
-                imgUrl: liveData[liveSubject].img,
+                imgUrl: liveData[liveSubject].img || "",
+                edition: liveData[liveSubject].edition || "2026_v1",
                 isLive: true,
                 currentClass: liveData[liveSubject].class
             };
         });
 
         Object.keys(githubData).forEach(gitSubject => {
-            const isAlreadyLive = Object.values(liveData).some(item => item.pdf === githubData[gitSubject].pdf);
-            if (!isAlreadyLive && githubData[gitSubject].pdf) {
+            const gPdf = githubData[gitSubject].pdf || "";
+            const gImg = githubData[gitSubject].img || "";
+            const isAlreadyLive = Object.entries(liveData).some(([liveName, item]) => {
+                if (gPdf && item.pdf && item.pdf === gPdf) return true;
+                if (!gPdf && gImg && item.img && item.img === gImg && !item.pdf) return true;
+                return liveName === gitSubject;
+            });
+            if (!isAlreadyLive && (gPdf || gImg)) {
                 globalMergedData[gitSubject] = {
                     name: gitSubject,
-                    pdfUrl: githubData[gitSubject].pdf,
-                    imgUrl: githubData[gitSubject].img || "https://via.placeholder.com/400x600?text=No+Cover",
+                    pdfUrl: gPdf,
+                    imgUrl: gImg,
+                    edition: "2026_v1",
                     isLive: false,
                     currentClass: ""
                 };
@@ -258,6 +286,9 @@ async function loadDashboard() {
         systemStatus.innerHTML = "<i class='bx bx-check-circle'></i> Systems synced. Ready for deployment.";
         systemStatus.style.color = "var(--success)";
         
+        updateQuietHoursIndicator();
+        populateExamRepoImagePicker();
+        renderAdminExamPapersList();
         renderMaterialGrid(); 
         renderClassCoversGrid();
         renderInteractiveSimulator();
@@ -730,6 +761,17 @@ window.addVideoToPlaylist = async () => {
     });
     await savePortalConfigToFirebase();
     showToast(`Added "${title.trim()}" to playlist "${playlist.trim() || 'General'}"!`, "success");
+
+    if (confirm(`🔔 Send Push Notification to students about this new video?\n\n"${title.trim()}"`)) {
+        const ok = await triggerCloudflarePush({
+            title: "🎬 New Video Class Uploaded!",
+            body: `${playlist.trim() || "Video"}: ${title.trim()}`,
+            topic: "all_students",
+            type: "video",
+            targetId: cleanId
+        });
+        if (ok) showToast("Video push notification sent!", "success");
+    }
 };
 
 window.deletePlaylistVideo = async (idx) => {
@@ -769,6 +811,18 @@ window.goLiveAndArchivePrevious = async () => {
 
     await savePortalConfigToFirebase();
     showToast("New Live Class is pinned on top & previous stream archived!", "success");
+
+    if (confirm(`🔴 Send HIGH-PRIORITY Live Class Push Notification to students now?\n\n"${newTitle.trim()}"`)) {
+        const ok = await triggerCloudflarePush({
+            title: "🔴 Live Class Started Now!",
+            body: `${newTitle.trim()} — Tap to join Live Class!`,
+            topic: "all_students",
+            type: "live",
+            targetId: cleanNewId,
+            forceBypassQuietHours: true
+        });
+        if (ok) showToast("🔴 Live Class push alert sent to all students!", "success");
+    }
 };
 
 window.addPastLiveManually = async () => {
@@ -805,28 +859,20 @@ window.manageAiConfigAndProSwitch = async () => {
 
         const curSwitch = cur.pro_limit_switch === true;
         const switchInput = prompt(
-            `1. Pro Daily Quota Switch (Currently: ${curSwitch ? "ON (20 Free / 100 Pro)" : "OFF (Training Mode)"})\nType "ON" to activate limits, or "OFF" to keep deactivated:`,
+            `Pro Daily Quota Switch (Currently: ${curSwitch ? "ON — 10 Free / 20 Pro / 50 Monthly" : "OFF — Unlimited Training Mode"})\n\nType "ON" to activate daily limits, or "OFF" to keep unlimited:\n(Note: All AI API keys are safely stored in Cloudflare Worker Secrets.)`,
             curSwitch ? "ON" : "OFF"
         );
         if (switchInput === null) return;
 
-        const freeKey = prompt("2. Remote Free Gemini API Key (optional override, leave blank to use APK key):", cur.free_gemini_key || "");
-        if (freeKey === null) return;
-
-        const proKey = prompt("3. Remote Pro Gemini API Key (for ₹100 Pro users only, optional):", cur.pro_gemini_key || "");
-        if (proKey === null) return;
-
         await setDoc(ref, {
             pro_limit_switch: switchInput.trim().toUpperCase() === "ON",
-            free_gemini_key: freeKey.trim(),
-            pro_gemini_key: proKey.trim(),
             updated_at: Date.now()
         }, { merge: true });
 
-        showToast("Remote Foxy AI Config & Pro Switch updated!", "success");
+        showToast(`Pro Quota Switch set to ${switchInput.trim().toUpperCase() === "ON" ? "ON" : "OFF"}!`, "success");
     } catch (e) {
         console.error(e);
-        showToast("Failed to update AI Config.", "error");
+        showToast("Failed to update Pro Quota Switch.", "error");
     }
 };
 
@@ -873,6 +919,23 @@ function renderMaterialGrid() {
     document.getElementById('statTotalCount').innerText = totalCount;
 }
 
+function getFilteredGithubImages() {
+    return allGithubImages.filter(img =>
+        activeImageFormatFilter === "ALL" || img.format === activeImageFormatFilter
+    );
+}
+
+window.syncImageFormatFilter = (fmt) => {
+    activeImageFormatFilter = fmt || "ALL";
+    const s1 = document.getElementById('imageFormatFilter');
+    const s2 = document.getElementById('classImageFormatFilter');
+    if (s1) s1.value = activeImageFormatFilter;
+    if (s2) s2.value = activeImageFormatFilter;
+    populateExamRepoImagePicker();
+    renderMaterialGrid();
+    renderClassCoversGrid();
+};
+
 function createMaterialCardHTML(item, container) {
     const card = document.createElement('div');
     card.className = 'subject-card';
@@ -883,34 +946,48 @@ function createMaterialCardHTML(item, container) {
         optionsHtml += `<option value="${cls}" ${selected}>${cls}</option>`;
     });
 
-    let imageOptionsHtml = `<option value="" disabled ${!item.imgUrl || item.imgUrl.includes('placeholder') ? 'selected' : ''}>-- Select Cover Image --</option>`;
+    const hasValidImg = item.imgUrl && !item.imgUrl.includes('placeholder');
+    let imageOptionsHtml = `<option value="" ${!hasValidImg ? 'selected' : ''}>🚫 No Cover Image (Use Default Foxy)</option>`;
     imageOptionsHtml += `<option value="CUSTOM">🔗 -- Paste Custom URL --</option>`;
     
     let imgFound = false;
-    allGithubImages.forEach(img => {
+    getFilteredGithubImages().forEach(img => {
         const isSelected = (item.imgUrl === img.url) ? 'selected' : '';
         if (isSelected) imgFound = true;
-        imageOptionsHtml += `<option value="${img.url}" ${isSelected}>${img.name}</option>`;
+        imageOptionsHtml += `<option value="${img.url}" ${isSelected}>[${img.format.toUpperCase()}] ${img.name}</option>`;
     });
 
-    if (item.imgUrl && !item.imgUrl.includes('placeholder') && !imgFound) {
-        imageOptionsHtml += `<option value="${item.imgUrl}" selected>🔗 Custom Link Attached</option>`;
+    if (hasValidImg && !imgFound) {
+        imageOptionsHtml += `<option value="${item.imgUrl}" selected>🔗 Attached Cover Image</option>`;
     }
 
+    const typeTag = (item.pdfUrl && hasValidImg)
+        ? `📘 PDF + Cover`
+        : item.pdfUrl
+            ? `📄 PDF Only`
+            : `🖼️ Image Only`;
+
     const badge = item.isLive 
-        ? `<div class="status-badge status-live"><i class='bx bx-broadcast'></i> LIVE IN APP</div>` 
+        ? `<div class="status-badge status-live"><i class='bx bx-broadcast'></i> LIVE • ${item.edition || '2026_v1'}</div>` 
         : `<div class="status-badge status-offline"><i class='bx bx-archive-in'></i> OFFLINE</div>`;
+
+    const displayThumb = hasValidImg
+        ? item.imgUrl
+        : "https://via.placeholder.com/400x600?text=PDF+Default+Cover";
 
     const safeName = escapeJs(item.name);
     const safeClass = escapeJs(item.currentClass);
-    const safePdf = escapeJs(item.pdfUrl);
-    const safeImg = escapeJs(item.imgUrl);
+    const safePdf = escapeJs(item.pdfUrl || "");
+    const safeImg = escapeJs(displayThumb);
 
     const actionsHtml = item.isLive
         ? `<button class="btn-offline" onclick="takeMaterialOffline('${safeName}', '${safeClass}')"><i class='bx bx-cloud-download'></i> Offline</button>`
         : `<button class="btn-publish" onclick="publishMaterialLive('${safeName}', '${safePdf}')"><i class='bx bx-cloud-upload'></i> Publish</button>`;
 
     const previewBtn = `<button class="btn-preview" onclick="previewMaterial('${safeName}', '${safeImg}')" title="Preview App Layout"><i class='bx bx-mobile-alt'></i></button>`;
+    const editionBtn = (item.isLive && item.pdfUrl)
+        ? `<button class="btn-preview" onclick="upgradeSubjectEdition('${safeName}', '${safeClass}')" title="Upgrade Edition & Archive Old Book" style="color:#FF8F00;"><i class='bx bx-history'></i></button>`
+        : '';
     const renameBtn = item.isLive 
         ? `<button class="btn-rename" onclick="openRenameModal('${safeName}', '${safeClass}')" title="Rename Subject Display"><i class='bx bx-edit-alt'></i></button>` 
         : '';
@@ -921,10 +998,11 @@ function createMaterialCardHTML(item, container) {
 
     card.innerHTML = `
         <div class="card-image-container">
-            <img src="${item.imgUrl}" alt="${item.name}">
+            <img src="${displayThumb}" alt="${item.name}">
             ${badge}
         </div>
         <div class="card-content">
+            <div style="font-size:11px; font-weight:700; color:#4318FF; margin-bottom:4px;">${typeTag}</div>
             <div class="card-title-wrapper">
                 <div class="card-title">${item.name}</div>
                 ${renameBtn}
@@ -937,6 +1015,7 @@ function createMaterialCardHTML(item, container) {
             </select>
             <div class="card-actions-row">
                 ${previewBtn}
+                ${editionBtn}
                 ${actionsHtml}
             </div>
         </div>
@@ -954,8 +1033,8 @@ function renderClassCoversGrid() {
     let imageOptionsHtml = `<option value="" disabled selected>-- Select an Image --</option>`;
     imageOptionsHtml += `<option value="CUSTOM">🔗 -- Paste Custom URL --</option>`;
     
-    allGithubImages.forEach(img => {
-        imageOptionsHtml += `<option value="${img.url}">${img.name}</option>`;
+    getFilteredGithubImages().forEach(img => {
+        imageOptionsHtml += `<option value="${img.url}">[${img.format.toUpperCase()}] ${img.name}</option>`;
     });
 
     CLASSES.forEach(cls => {
@@ -1043,20 +1122,21 @@ document.getElementById('cropFileInput').addEventListener('change', function(e) 
 
 window.downloadCroppedImage = () => {
     if(!window.currentCropper) return;
-    
+    const mime = document.getElementById('cropExportFormat')?.value || 'image/webp';
+    const ext = mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : 'webp';
     const canvas = window.currentCropper.getCroppedCanvas({ width: 600, height: 900 });
     
     canvas.toBlob((blob) => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = "cropped_cover_image.jpg";
+        a.download = `cropped_cover_image.${ext}`;
         a.click();
         URL.revokeObjectURL(url);
         
-        showToast("Image cropped! Upload this new file to GitHub.", "success");
+        showToast(`Cropped as .${ext}! Upload this new file to GitHub.`, "success");
         closeCropModal();
-    }, 'image/jpeg', 0.9);
+    }, mime, 0.9);
 };
 
 // ==========================================
@@ -1089,14 +1169,16 @@ window.confirmRename = async () => {
 
         await updateDoc(docRef, {
             subjects: arrayUnion(newName),
-            [`pdf_links.${newName}`]: material.pdfUrl,
-            [`image_links.${newName}`]: material.imgUrl
+            [`pdf_links.${newName}`]: material.pdfUrl || "",
+            [`image_links.${newName}`]: material.imgUrl || "",
+            [`book_editions.${newName}`]: material.edition || "2026_v1"
         });
 
         await updateDoc(docRef, {
             subjects: arrayRemove(oldName),
             [`pdf_links.${oldName}`]: deleteField(),
-            [`image_links.${oldName}`]: deleteField()
+            [`image_links.${oldName}`]: deleteField(),
+            [`book_editions.${oldName}`]: deleteField()
         });
 
         showToast(`Renamed to "${newName}"! App will update instantly.`, "success");
@@ -1173,33 +1255,37 @@ window.publishMaterialLive = async (subjectName, pdfUrl) => {
     const classSelect = document.getElementById(`select-${subjectName}`);
     const imgSelect = document.getElementById(`imgSelect-${subjectName}`);
     const selectedClass = classSelect.value;
-    let imgUrl = imgSelect.value;
+    const imgUrl = imgSelect ? imgSelect.value : "";
 
-    if(!selectedClass) {
+    if (!selectedClass) {
         showToast("Select a class before publishing!", "error");
         return;
     }
-    if(!imgUrl) {
-        showToast("Please select a cover image!", "error");
+    if (imgUrl === "CUSTOM") {
+        showToast("Please provide a valid Custom URL first.", "error");
         return;
     }
-    if (imgUrl === "CUSTOM") {
-         showToast("Please provide a valid Custom URL first.", "error");
-         return;
+    const finalPdf = pdfUrl || "";
+    const finalImg = imgUrl || "";
+    if (!finalPdf && !finalImg) {
+        showToast("Attach at least a PDF or a Cover Image!", "error");
+        return;
     }
 
     try {
         const docRef = doc(db, "Curriculum", selectedClass);
         await updateDoc(docRef, {
             subjects: arrayUnion(subjectName),
-            [`pdf_links.${subjectName}`]: pdfUrl,
-            [`image_links.${subjectName}`]: imgUrl
+            [`pdf_links.${subjectName}`]: finalPdf,
+            [`image_links.${subjectName}`]: finalImg,
+            [`book_editions.${subjectName}`]: "2026_v1"
         }).catch(async (e) => {
-            if(e.code === 'not-found') {
+            if (e.code === 'not-found') {
                 await setDoc(docRef, {
                     subjects: [subjectName],
-                    pdf_links: { [subjectName]: pdfUrl },
-                    image_links: { [subjectName]: imgUrl }
+                    pdf_links: { [subjectName]: finalPdf },
+                    image_links: { [subjectName]: finalImg },
+                    book_editions: { [subjectName]: "2026_v1" }
                 });
             } else throw e;
         });
@@ -1212,12 +1298,13 @@ window.publishMaterialLive = async (subjectName, pdfUrl) => {
 };
 
 window.takeMaterialOffline = async (subjectName, currentClass) => {
-    if(confirm(`Remove "${subjectName}" from the app?`)) {
+    if (confirm(`Remove "${subjectName}" from the app?`)) {
         try {
             await updateDoc(doc(db, "Curriculum", currentClass), {
                 subjects: arrayRemove(subjectName),
                 [`pdf_links.${subjectName}`]: deleteField(),
-                [`image_links.${subjectName}`]: deleteField()
+                [`image_links.${subjectName}`]: deleteField(),
+                [`book_editions.${subjectName}`]: deleteField()
             });
             showToast(`"${subjectName}" taken offline.`, "error");
             loadDashboard(); 
@@ -1322,16 +1409,18 @@ window.moveFirebaseAiChunksToPc = async () => {
             const raw = docSnap.data();
             if (raw.needs_improvement === true) dislikedCount++;
 
+            const editionTag = raw.edition || "2026_v1";
             const classFolder = raw.class_folder || "class_general";
             const bookId = raw.book_id || docSnap.id;
             const pageNum = Number(raw.page_number || 1);
             const paddedPage = `p${String(pageNum).padStart(3, "0")}.json`;
-            const targetPath = raw.github_target_path || `chunks/${classFolder}/${bookId}/${paddedPage}`;
+            const targetPath = raw.github_target_path || `chunks/${editionTag}/${classFolder}/${bookId}/${paddedPage}`;
 
             // Strip internal Firebase-only tracking fields before writing clean GitHub JSON
             const cleanChunk = {
-                chunk_id: raw.chunk_id || `${classFolder}__${bookId}__p${String(pageNum).padStart(3, "0")}`,
-                schema_version: 2,
+                chunk_id: raw.chunk_id || `${editionTag}__${classFolder}__${bookId}__p${String(pageNum).padStart(3, "0")}`,
+                edition: editionTag,
+                schema_version: 3,
                 class_folder: classFolder,
                 book_id: bookId,
                 subject_name: raw.subject_name || "",
@@ -1403,5 +1492,342 @@ window.moveFirebaseAiChunksToPc = async () => {
     } catch (e) {
         console.error(e);
         showToast("Error exporting AI chunks ZIP.", "error");
+    }
+};
+
+// ==========================================
+// 13. CLOUDFLARE WORKER PUSH NOTIFICATIONS (REGULATED)
+// ==========================================
+function getIstHourNow() {
+    const now = new Date();
+    const utcMins = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const istMins = (utcMins + 330) % 1440;
+    return Math.floor(istMins / 60);
+}
+
+function updateQuietHoursIndicator() {
+    const badge = document.getElementById("quietHoursBadge");
+    if (!badge) return;
+    const h = getIstHourNow();
+    if (h >= 21 || h < 7) {
+        badge.innerText = "🌙 Quiet Hours (9 PM–7 AM IST)";
+        badge.style.background = "#FDE8E7";
+        badge.style.color = "#EE5D50";
+    } else {
+        badge.innerText = "✅ Active Window (7 AM–9 PM IST)";
+        badge.style.background = "#E6FBF5";
+        badge.style.color = "#05CD99";
+    }
+}
+
+function getAdminPushSecret() {
+    let sec = sessionStorage.getItem("admin_push_secret") || "";
+    if (!sec) {
+        sec = prompt("Enter your Cloudflare Worker ADMIN_PUSH_SECRET (kept only for this browser tab):") || "";
+        if (sec.trim()) sessionStorage.setItem("admin_push_secret", sec.trim());
+    }
+    return sec.trim();
+}
+
+window.resetAdminPushSecret = () => {
+    sessionStorage.removeItem("admin_push_secret");
+    const next = getAdminPushSecret();
+    if (next) showToast("Cloudflare Push Secret saved for this session!", "success");
+};
+
+async function triggerCloudflarePush({ title, body, topic = "all_students", type = "notice", targetId = "", forceBypassQuietHours = false }) {
+    // Regulation: Warn admin if sending more than 5 pushes in one day to prevent student fatigue
+    const today = new Date().toISOString().slice(0, 10);
+    const sentKey = `push_count_${today}`;
+    const sentToday = Number(localStorage.getItem(sentKey) || "0");
+    if (sentToday >= 5 && !confirm(`⚠️ You already sent ${sentToday} notifications today. Send another one anyway?`)) {
+        return false;
+    }
+
+    const secret = getAdminPushSecret();
+    if (!secret) {
+        showToast("Push cancelled (no secret entered).", "error");
+        return false;
+    }
+
+    try {
+        const res = await fetch(WORKER_NOTIFY_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Admin-Secret": secret
+            },
+            body: JSON.stringify({ title, body, topic, type, targetId, forceBypassQuietHours })
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            if (res.status === 401) sessionStorage.removeItem("admin_push_secret");
+            showToast(err.error || `Push failed (HTTP ${res.status}).`, "error");
+            return false;
+        }
+        localStorage.setItem(sentKey, String(sentToday + 1));
+        return true;
+    } catch (e) {
+        console.error(e);
+        showToast("Network error contacting Cloudflare Worker.", "error");
+        return false;
+    }
+}
+
+window.sendManualNoticeAndPush = async () => {
+    const title = document.getElementById("pushTitleInput").value.trim();
+    const body = document.getElementById("pushBodyInput").value.trim();
+    const topic = document.getElementById("pushTopicSelect").value;
+    if (!title || !body) {
+        showToast("Enter both notification title and message!", "error");
+        return;
+    }
+
+    // 1. Update Side Drawer Notice Board (sidebar_items[0]) in Firestore
+    if (!Array.isArray(portalConfig.sidebar_items) || portalConfig.sidebar_items.length === 0) {
+        portalConfig.sidebar_items = [{ title: "📢 ସୂଚନା ଫଳକ (Notice Board)", target: "" }];
+    }
+    const oldNotice = portalConfig.sidebar_items[0]?.target || "";
+    const stamp = new Date().toLocaleDateString("en-IN");
+    portalConfig.sidebar_items[0] = {
+        title: portalConfig.sidebar_items[0]?.title || "📢 ସୂଚନା ଫଳକ (Notice Board)",
+        target: `📌 ${title} (${stamp})\n${body}\n\n${oldNotice}`.slice(0, 2800)
+    };
+    await savePortalConfigToFirebase();
+
+    // 2. Push to locked student phones via Cloudflare Worker -> FCM
+    const ok = await triggerCloudflarePush({ title, body, topic, type: "notice" });
+    if (ok) {
+        document.getElementById("pushTitleInput").value = "";
+        document.getElementById("pushBodyInput").value = "";
+        showToast("Notice Board updated & Push Notification sent!", "success");
+    }
+};
+
+// ==========================================
+// 14. CLASS-WISE EXAM PAPER PUBLISHER & MANAGER
+// ==========================================
+function populateExamRepoImagePicker() {
+    const sel = document.getElementById("examRepoImgPicker");
+    if (!sel) return;
+    sel.innerHTML = `<option value="">-- Quick Add Image from GitHub Repo --</option>`;
+    getFilteredGithubImages().forEach(img => {
+        const opt = document.createElement("option");
+        opt.value = img.url;
+        opt.textContent = `[${img.format.toUpperCase()}] ${img.name}`;
+        sel.appendChild(opt);
+    });
+}
+
+window.insertGithubImgToExam = () => {
+    const sel = document.getElementById("examRepoImgPicker");
+    const box = document.getElementById("examImagesInput");
+    if (!sel || !box || !sel.value) return;
+    box.value = box.value.trim() ? `${box.value.trim()}\n${sel.value}` : sel.value;
+    sel.value = "";
+};
+
+window.toggleExamFormatInputs = () => {
+    const fmt = document.getElementById("examFormatSelect").value;
+    document.getElementById("examRichTextWrap").classList.toggle("hidden", fmt !== "richtext");
+    document.getElementById("examImagesWrap").classList.toggle("hidden", fmt !== "images");
+    document.getElementById("examHtmlUrlInput").classList.toggle("hidden", fmt !== "html");
+};
+
+window.formatExamText = (cmd) => {
+    document.getElementById("examRichEditor")?.focus();
+    document.execCommand(cmd, false, null);
+};
+
+window.insertExamEmoji = (emoji) => {
+    document.getElementById("examRichEditor")?.focus();
+    document.execCommand("insertText", false, emoji);
+};
+
+function renderAdminExamPapersList() {
+    const el = document.getElementById("adminExamPapersList");
+    if (!el) return;
+    el.innerHTML = "";
+    if (!publishedExamPapers.length) {
+        el.innerHTML = `<div style="font-size:12px; color:#94A3B8;">No exam papers published yet.</div>`;
+        return;
+    }
+    publishedExamPapers.forEach(p => {
+        const icon = p.format === "images" ? "🖼️" : p.format === "html" ? "🌐" : "📝";
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex; justify-content:space-between; align-items:center; background:#F4F7FE; padding:8px 10px; border-radius:10px; gap:8px;";
+        row.innerHTML = `
+            <div style="flex:1; min-width:0;">
+                <div style="font-size:12px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${icon} ${p.title || 'Exam'}</div>
+                <div style="font-size:10px; color:#64748B;">${p.target_class || 'ALL'} • ${(p.subjects || []).join(", ") || "All Subjects"} ${p.exam_date ? "• " + p.exam_date : ""}</div>
+            </div>
+            <button onclick="deleteExamPaper('${escapeJs(p.id)}')" style="background:#FDE8E7; color:#EE5D50; padding:6px 8px; border-radius:8px; font-size:12px;">🗑️</button>
+        `;
+        el.appendChild(row);
+    });
+}
+
+window.publishExamPaper = async () => {
+    const title = document.getElementById("examTitleInput").value.trim();
+    const examDate = document.getElementById("examDateInput").value.trim();
+    const targetClass = document.getElementById("examClassSelect").value;
+    const format = document.getElementById("examFormatSelect").value;
+    const subjects = document.getElementById("examSubjectsInput").value.split(",").map(s => s.trim()).filter(Boolean);
+
+    if (!title) {
+        showToast("Enter an Exam Title!", "error");
+        return;
+    }
+
+    const richHtml = format === "richtext" ? document.getElementById("examRichEditor").innerHTML.trim() : "";
+    const imageUrls = format === "images"
+        ? document.getElementById("examImagesInput").value.split("\n").map(u => u.trim()).filter(Boolean)
+        : [];
+    const webpageUrl = format === "html" ? document.getElementById("examHtmlUrlInput").value.trim() : "";
+
+    if (format === "richtext" && !richHtml) return showToast("Type the exam paper content first!", "error");
+    if (format === "images" && imageUrls.length === 0) return showToast("Add at least 1 question image URL!", "error");
+    if (format === "html" && !webpageUrl.startsWith("https://")) return showToast("Enter a valid https:// HTML webpage URL!", "error");
+
+    const docId = `exam_${Date.now()}`;
+    const paperData = {
+        title,
+        exam_date: examDate,
+        target_class: targetClass,
+        subjects,
+        format,
+        rich_html: richHtml,
+        image_urls: imageUrls,
+        webpage_url: webpageUrl,
+        created_at: Date.now()
+    };
+
+    try {
+        await setDoc(doc(db, "ExamPapers", docId), paperData);
+        publishedExamPapers.unshift({ id: docId, ...paperData });
+        renderAdminExamPapersList();
+
+        document.getElementById("examTitleInput").value = "";
+        document.getElementById("examDateInput").value = "";
+        document.getElementById("examSubjectsInput").value = "";
+        document.getElementById("examRichEditor").innerHTML = "";
+        document.getElementById("examImagesInput").value = "";
+        document.getElementById("examHtmlUrlInput").value = "";
+        showToast(`Exam Paper "${title}" is live in the App!`, "success");
+
+        if (document.getElementById("chkPushExamAlert").checked) {
+            const topicMap = {
+                "ପ୍ରଥମ ଶ୍ରେଣୀ": "class_1", "ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ": "class_2", "ତୃତୀୟ ଶ୍ରେଣୀ": "class_3",
+                "ଚତୁର୍ଥ ଶ୍ରେଣୀ": "class_4", "ପଞ୍ଚମ ଶ୍ରେଣୀ": "class_5", "ଷଷ୍ଠ ଶ୍ରେଣୀ": "class_6",
+                "ସପ୍ତମ ଶ୍ରେଣୀ": "class_7", "ଅଷ୍ଟମ ଶ୍ରେଣୀ": "class_8", "ନବମ ଶ୍ରେଣୀ": "class_9", "ଦଶମ ଶ୍ରେଣୀ": "class_10"
+            };
+            await triggerCloudflarePush({
+                title: `📅 New Exam: ${title}`,
+                body: `${subjects.join(", ") || "All Subjects"}${examDate ? " • " + examDate : ""}`,
+                topic: topicMap[targetClass] || "all_students",
+                type: "exam",
+                targetId: docId
+            });
+        }
+    } catch (e) {
+        console.error(e);
+        showToast("Failed to publish exam paper.", "error");
+    }
+};
+
+window.deleteExamPaper = async (docId) => {
+    if (!confirm("Delete this exam paper from the app?")) return;
+    try {
+        await deleteDoc(doc(db, "ExamPapers", docId));
+        publishedExamPapers = publishedExamPapers.filter(p => p.id !== docId);
+        renderAdminExamPapersList();
+        showToast("Exam paper deleted.", "error");
+    } catch (e) {
+        showToast("Failed to delete exam paper.", "error");
+    }
+};
+
+// ==========================================
+// 15. STANDALONE PDF/IMAGE-ONLY PUBLISHER & EDITION UPGRADER
+// ==========================================
+window.publishCustomStandaloneMaterial = async () => {
+    const subjectName = prompt("1. Subject / Card Display Name (e.g., ଗଣିତ or Time Table Chart):");
+    if (!subjectName || !subjectName.trim()) return;
+
+    const classIndexStr = prompt(
+        "2. Enter Class Number (1 to 10):\n" + CLASSES.map((c, i) => `${i + 1} = ${c}`).join("\n"),
+        "1"
+    );
+    const idx = parseInt(classIndexStr || "", 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= CLASSES.length) {
+        showToast("Invalid class number (must be 1 to 10).", "error");
+        return;
+    }
+    const selectedClass = CLASSES[idx];
+
+    const pdfUrl = (prompt("3. PDF URL (leave BLANK if publishing Image-Only card):", "") || "").trim();
+    const imgUrl = (prompt("4. Cover / Standalone Image URL (.webp/.png/.jpg — leave BLANK if publishing PDF-Only):", "") || "").trim();
+
+    if (!pdfUrl && !imgUrl) {
+        showToast("Provide at least a PDF URL or an Image URL!", "error");
+        return;
+    }
+
+    try {
+        const cleanName = subjectName.trim();
+        const docRef = doc(db, "Curriculum", selectedClass);
+        await updateDoc(docRef, {
+            subjects: arrayUnion(cleanName),
+            [`pdf_links.${cleanName}`]: pdfUrl,
+            [`image_links.${cleanName}`]: imgUrl,
+            [`book_editions.${cleanName}`]: "2026_v1"
+        }).catch(async (e) => {
+            if (e.code === 'not-found') {
+                await setDoc(docRef, {
+                    subjects: [cleanName],
+                    pdf_links: { [cleanName]: pdfUrl },
+                    image_links: { [cleanName]: imgUrl },
+                    book_editions: { [cleanName]: "2026_v1" }
+                });
+            } else throw e;
+        });
+        showToast(`Published "${cleanName}" to ${selectedClass}!`, "success");
+        loadDashboard();
+    } catch (e) {
+        console.error(e);
+        showToast("Failed to publish material.", "error");
+    }
+};
+
+window.upgradeSubjectEdition = async (subjectName, className) => {
+    const item = globalMergedData[subjectName];
+    if (!item) return;
+
+    const newPdfUrl = prompt(
+        `Upgrade "${subjectName}" (${className})\nCurrent Edition: ${item.edition || "2026_v1"}\n\n1. Paste the NEW Edition PDF URL:`,
+        item.pdfUrl
+    );
+    if (!newPdfUrl || !newPdfUrl.trim()) return;
+
+    const newEdition = prompt("2. New Edition Tag (e.g., 2027_v1):", "2027_v1");
+    if (!newEdition || !newEdition.trim()) return;
+
+    try {
+        const docRef = doc(db, "Curriculum", className);
+        await updateDoc(docRef, {
+            archived_books: arrayUnion({
+                name: subjectName,
+                edition: item.edition || "2026_v1",
+                pdf_url: item.pdfUrl,
+                cover_url: item.imgUrl || ""
+            }),
+            [`pdf_links.${subjectName}`]: newPdfUrl.trim(),
+            [`book_editions.${subjectName}`]: newEdition.trim()
+        });
+        showToast(`"${subjectName}" upgraded to ${newEdition.trim()} & old edition archived!`, "success");
+        loadDashboard();
+    } catch (e) {
+        console.error(e);
+        showToast("Failed to upgrade book edition.", "error");
     }
 };
