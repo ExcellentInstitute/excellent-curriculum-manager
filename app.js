@@ -2,6 +2,7 @@
 // 1. FIREBASE IMPORTS
 // ==========================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 import { getFirestore, doc, updateDoc, setDoc, arrayUnion, arrayRemove, deleteField, getDoc, collection, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 // ==========================================
@@ -22,6 +23,7 @@ const GITHUB_REPO = "excellent-curriculum-manager";
 const WORKER_NOTIFY_URL = "https://foxy-olearning-proxy.pkb9658-pkb-pkb.workers.dev/admin/notify";
 
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 const db = getFirestore(app);
 
 const CLASSES = ["ପ୍ରଥମ ଶ୍ରେଣୀ", "ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ", "ତୃତୀୟ ଶ୍ରେଣୀ", "ଚତୁର୍ଥ ଶ୍ରେଣୀ", "ପଞ୍ଚମ ଶ୍ରେଣୀ", "ଷଷ୍ଠ ଶ୍ରେଣୀ", "ସପ୍ତମ ଶ୍ରେଣୀ", "ଅଷ୍ଟମ ଶ୍ରେଣୀ", "ନବମ ଶ୍ରେଣୀ", "ଦଶମ ଶ୍ରେଣୀ"];
@@ -118,27 +120,28 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
 });
 
 // ==========================================
-// 4. SECURE LOGIN
+// 4. SECURE FIREBASE AUTH LOGIN
 // ==========================================
 document.getElementById('loginBtn').addEventListener('click', async () => {
+    const email = document.getElementById('emailInput').value.trim();
     const pass = document.getElementById('passInput').value.trim();
-    if (!pass) return;
+    if (!email || !pass) {
+        document.getElementById('loginError').innerText = "Enter both email and password.";
+        return;
+    }
 
     const btn = document.getElementById('loginBtn');
-    btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Verifying...`;
+    document.getElementById('loginError').innerText = "";
+    btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Signing in...`;
 
     try {
-        const docSnap = await getDoc(doc(db, "Admin", "Settings"));
-        if (docSnap.exists() && docSnap.data().passcode === pass) {
-            loginSection.classList.add('hidden');
-            dashboardSection.classList.remove('hidden');
-            loadDashboard();
-        } else {
-            document.getElementById('loginError').innerText = "Incorrect passcode.";
-            btn.innerHTML = `Unlock System <i class='bx bx-right-arrow-alt'></i>`;
-        }
+        await signInWithEmailAndPassword(auth, email, pass);
+        loginSection.classList.add('hidden');
+        dashboardSection.classList.remove('hidden');
+        loadDashboard();
     } catch (e) {
-        document.getElementById('loginError').innerText = "Database connection error.";
+        console.error(e);
+        document.getElementById('loginError').innerText = "Invalid admin email or password.";
         btn.innerHTML = `Unlock System <i class='bx bx-right-arrow-alt'></i>`;
     }
 });
@@ -146,7 +149,10 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
 document.getElementById('passInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('loginBtn').click();
 });
-document.getElementById('logoutBtn').addEventListener('click', () => window.location.reload());
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await signOut(auth).catch(() => {});
+    window.location.reload();
+});
 
 // ==========================================
 // 5. CORE ENGINE: SCAN & MERGE DATA (WITH BANDWIDTH CACHE)
