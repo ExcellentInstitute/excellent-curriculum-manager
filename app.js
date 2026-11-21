@@ -31,8 +31,12 @@ let globalMergedData = {};
 let liveClassCovers = {};
 let allGithubImages = [];
 let publishedExamPapers = [];
+let archivedBooksList = [];
+let selectedMaterialKeys = new Set();
 let activeImageFormatFilter = "ALL";
 let portalConfig = {
+    privacy_policy_url: "https://excellentinstitute.github.io/excellent-curriculum-manager/privacy-policy.html",
+    notice_history: [],
     header_title_odia: "ଶ୍ରେଣୀ ଚୟନ କରନ୍ତୁ",
     header_title_en: "Select Your Class",
     tab_study_label: "📚 ପାଠ୍ୟ ପୁସ୍ତକ",
@@ -180,6 +184,7 @@ async function loadDashboard() {
         }
 
         const liveData = {};
+        archivedBooksList = [];
         for (const cls of CLASSES) {
             const docSnap = await getDoc(doc(db, "Curriculum", cls));
             if (docSnap.exists()) {
@@ -192,6 +197,22 @@ async function loadDashboard() {
                             img: data.image_links?.[sub] || "",
                             edition: data.book_editions?.[sub] || "2026_v1"
                         };
+                    });
+                }
+                if (Array.isArray(data.archived_books)) {
+                    data.archived_books.forEach((arch, idx) => {
+                        archivedBooksList.push({
+                            archiveKey: `OLD__${cls}__${idx}`,
+                            archiveIndex: idx,
+                            rawEntry: arch,
+                            name: arch.name || "Old Book",
+                            pdfUrl: arch.pdf_url || "",
+                            imgUrl: arch.cover_url || "",
+                            edition: arch.edition || "Old",
+                            currentClass: cls,
+                            isLive: false,
+                            isOld: true
+                        });
                     });
                 }
             }
@@ -287,6 +308,7 @@ async function loadDashboard() {
         systemStatus.style.color = "var(--success)";
         
         updateQuietHoursIndicator();
+        renderAdminNoticesList();
         populateExamRepoImagePicker();
         renderAdminExamPapersList();
         renderMaterialGrid(); 
@@ -891,33 +913,48 @@ window.setBackupPdfMirror = async () => {
 // ==========================================
 // 6. RENDER MATERIAL GRID & STATS (TAB 1)
 // ==========================================
-function renderMaterialGrid() {
+window.renderMaterialGrid = function renderMaterialGrid() {
     const contentGrid = document.getElementById('content-grid');
     contentGrid.innerHTML = '';
     const searchQuery = document.getElementById('searchInput').value.toLowerCase();
     const classFilter = document.getElementById('classFilter').value;
+    const statusFilter = document.getElementById('statusFilter')?.value || "ALL";
 
     let liveCount = 0;
     let offlineCount = 0;
     let totalCount = 0;
 
-    Object.values(globalMergedData).forEach(item => {
+    const mergedItems = Object.values(globalMergedData);
+    mergedItems.forEach(item => {
         totalCount++;
         if (item.isLive) liveCount++;
         else offlineCount++;
+    });
 
+    const allDisplayItems = [
+        ...mergedItems.map(i => ({ ...i, isOld: false, itemKey: i.name })),
+        ...archivedBooksList.map(a => ({ ...a, itemKey: a.archiveKey }))
+    ];
+
+    allDisplayItems.forEach(item => {
         const matchesSearch = item.name.toLowerCase().includes(searchQuery);
         const matchesClass = classFilter === "ALL" || item.currentClass === classFilter;
+        const matchesStatus =
+            statusFilter === "ALL" ||
+            (statusFilter === "LIVE" && item.isLive && !item.isOld) ||
+            (statusFilter === "OFFLINE" && !item.isLive && !item.isOld) ||
+            (statusFilter === "OLD" && item.isOld);
 
-        if (matchesSearch && matchesClass) {
+        if (matchesSearch && matchesClass && matchesStatus) {
             createMaterialCardHTML(item, contentGrid);
         }
     });
 
     document.getElementById('statLiveCount').innerText = liveCount;
     document.getElementById('statOfflineCount').innerText = offlineCount;
-    document.getElementById('statTotalCount').innerText = totalCount;
-}
+    document.getElementById('statTotalCount').innerText = totalCount + archivedBooksList.length;
+    updateBulkCountLabel();
+};
 
 function getFilteredGithubImages() {
     return allGithubImages.filter(img =>
@@ -936,9 +973,67 @@ window.syncImageFormatFilter = (fmt) => {
     renderClassCoversGrid();
 };
 
+function updateBulkCountLabel() {
+    const el = document.getElementById('bulkSelectedCount');
+    if (el) el.innerText = `${selectedMaterialKeys.size} selected`;
+}
+
+window.toggleMaterialSelect = (key, checked) => {
+    if (checked) selectedMaterialKeys.add(key);
+    else selectedMaterialKeys.delete(key);
+    updateBulkCountLabel();
+};
+
+window.toggleSelectAllVisible = (checked) => {
+    document.querySelectorAll('.material-bulk-chk').forEach(chk => {
+        chk.checked = checked;
+        const k = chk.getAttribute('data-key');
+        if (checked) selectedMaterialKeys.add(k);
+        else selectedMaterialKeys.delete(k);
+    });
+    updateBulkCountLabel();
+};
+
 function createMaterialCardHTML(item, container) {
     const card = document.createElement('div');
     card.className = 'subject-card';
+
+    const safeKey = escapeJs(item.itemKey);
+    const safeName = escapeJs(item.name);
+    const safeClass = escapeJs(item.currentClass || "");
+    const safePdf = escapeJs(item.pdfUrl || "");
+    const hasValidImg = item.imgUrl && !item.imgUrl.includes('placeholder');
+    const displayThumb = hasValidImg
+        ? item.imgUrl
+        : "https://via.placeholder.com/400x600?text=PDF+Default+Cover";
+    const safeImg = escapeJs(displayThumb);
+
+    const readPdfBtn = item.pdfUrl
+        ? `<button class="btn-preview" onclick="openPdfReaderModal('${safeName}', '${safePdf}')" title="Read / Confirm PDF" style="color:#4318FF;"><i class='bx bxs-file-pdf'></i></button>`
+        : '';
+
+    // SPECIAL CARD FOR OLD / ARCHIVED BOOKS
+    if (item.isOld) {
+        card.innerHTML = `
+            <div class="card-image-container">
+                <img src="${displayThumb}" alt="${item.name}">
+                <div class="status-badge" style="background:#FF8F00; color:white;"><i class='bx bx-archive'></i> OLD • ${item.edition}</div>
+            </div>
+            <div class="card-content">
+                <div style="font-size:11px; font-weight:700; color:#FF8F00; margin-bottom:4px;">📦 Archived Book (${item.currentClass})</div>
+                <div class="card-title-wrapper">
+                    <div class="card-title">${item.name}</div>
+                </div>
+                <div class="card-actions-row" style="margin-top:10px;">
+                    ${readPdfBtn}
+                    <button class="btn-publish" onclick="restoreOldBookToLive('${safeKey}')" style="font-size:12px;">♻️ Restore Live</button>
+                    <button class="btn-offline" onclick="deleteArchivedBook('${safeKey}')" title="Delete Old Book" style="padding:8px 10px;"><i class='bx bx-trash'></i></button>
+                </div>
+            </div>
+        `;
+        container.appendChild(card);
+        return;
+    }
 
     let optionsHtml = `<option value="" disabled ${!item.isLive ? 'selected' : ''}>-- Assign a Class --</option>`;
     CLASSES.forEach(cls => {
@@ -946,8 +1041,7 @@ function createMaterialCardHTML(item, container) {
         optionsHtml += `<option value="${cls}" ${selected}>${cls}</option>`;
     });
 
-    const hasValidImg = item.imgUrl && !item.imgUrl.includes('placeholder');
-    let imageOptionsHtml = `<option value="" ${!hasValidImg ? 'selected' : ''}>🚫 No Cover Image (Use Default Foxy)</option>`;
+    let imageOptionsHtml = `<option value="" ${!hasValidImg ? 'selected' : ''}>🚫 No Cover Image (Default Foxy)</option>`;
     imageOptionsHtml += `<option value="CUSTOM">🔗 -- Paste Custom URL --</option>`;
     
     let imgFound = false;
@@ -971,33 +1065,29 @@ function createMaterialCardHTML(item, container) {
         ? `<div class="status-badge status-live"><i class='bx bx-broadcast'></i> LIVE • ${item.edition || '2026_v1'}</div>` 
         : `<div class="status-badge status-offline"><i class='bx bx-archive-in'></i> OFFLINE</div>`;
 
-    const displayThumb = hasValidImg
-        ? item.imgUrl
-        : "https://via.placeholder.com/400x600?text=PDF+Default+Cover";
-
-    const safeName = escapeJs(item.name);
-    const safeClass = escapeJs(item.currentClass);
-    const safePdf = escapeJs(item.pdfUrl || "");
-    const safeImg = escapeJs(displayThumb);
-
     const actionsHtml = item.isLive
         ? `<button class="btn-offline" onclick="takeMaterialOffline('${safeName}', '${safeClass}')"><i class='bx bx-cloud-download'></i> Offline</button>`
         : `<button class="btn-publish" onclick="publishMaterialLive('${safeName}', '${safePdf}')"><i class='bx bx-cloud-upload'></i> Publish</button>`;
 
-    const previewBtn = `<button class="btn-preview" onclick="previewMaterial('${safeName}', '${safeImg}')" title="Preview App Layout"><i class='bx bx-mobile-alt'></i></button>`;
-    const editionBtn = (item.isLive && item.pdfUrl)
-        ? `<button class="btn-preview" onclick="upgradeSubjectEdition('${safeName}', '${safeClass}')" title="Upgrade Edition & Archive Old Book" style="color:#FF8F00;"><i class='bx bx-history'></i></button>`
+    const previewBtn = `<button class="btn-preview" onclick="previewMaterial('${safeName}', '${safeImg}')" title="Preview Cover"><i class='bx bx-mobile-alt'></i></button>`;
+    const moveOldBtn = (item.isLive && item.pdfUrl)
+        ? `<button class="btn-preview" onclick="moveLiveBookToOld('${safeName}', '${safeClass}')" title="Move to Old Books / Upgrade Edition" style="color:#FF8F00;"><i class='bx bx-archive'></i></button>`
         : '';
     const renameBtn = item.isLive 
-        ? `<button class="btn-rename" onclick="openRenameModal('${safeName}', '${safeClass}')" title="Rename Subject Display"><i class='bx bx-edit-alt'></i></button>` 
+        ? `<button class="btn-rename" onclick="openRenameModal('${safeName}', '${safeClass}')" title="Rename Subject"><i class='bx bx-edit-alt'></i></button>` 
         : '';
 
     const onImageChange = item.isLive 
         ? `onchange="updateLiveSubjectImage('${safeName}', '${safeClass}', this.value)"` 
         : `onchange="updateCardImagePreview('${safeName}', this.value)"`;
 
+    const isChecked = selectedMaterialKeys.has(item.itemKey) ? 'checked' : '';
+
     card.innerHTML = `
-        <div class="card-image-container">
+        <div class="card-image-container" style="position:relative;">
+            <input type="checkbox" class="material-bulk-chk" data-key="${item.itemKey}" ${isChecked}
+                onchange="toggleMaterialSelect('${safeKey}', this.checked)"
+                style="position:absolute; top:10px; left:10px; width:20px; height:20px; z-index:5; cursor:pointer; accent-color:#4318FF;">
             <img src="${displayThumb}" alt="${item.name}">
             ${badge}
         </div>
@@ -1014,8 +1104,9 @@ function createMaterialCardHTML(item, container) {
                 ${imageOptionsHtml}
             </select>
             <div class="card-actions-row">
+                ${readPdfBtn}
                 ${previewBtn}
-                ${editionBtn}
+                ${moveOldBtn}
                 ${actionsHtml}
             </div>
         </div>
@@ -1024,23 +1115,30 @@ function createMaterialCardHTML(item, container) {
 }
 
 // ==========================================
-// 7. RENDER CLASS COVERS GRID (TAB 2)
+// 7. FAST WORK-FRIENDLY CLASS COVERS GRID (TAB 2)
 // ==========================================
 function renderClassCoversGrid() {
     const classGrid = document.getElementById('class-covers-grid');
     classGrid.innerHTML = '';
 
-    let imageOptionsHtml = `<option value="" disabled selected>-- Select an Image --</option>`;
-    imageOptionsHtml += `<option value="CUSTOM">🔗 -- Paste Custom URL --</option>`;
-    
-    getFilteredGithubImages().forEach(img => {
-        imageOptionsHtml += `<option value="${img.url}">[${img.format.toUpperCase()}] ${img.name}</option>`;
-    });
-
     CLASSES.forEach(cls => {
-        const isLive = liveClassCovers[cls] !== undefined;
-        const imgUrl = isLive ? liveClassCovers[cls] : "https://via.placeholder.com/400x600?text=No+Cover";
-        
+        const currentUrl = liveClassCovers[cls] || "";
+        const isLive = currentUrl !== "";
+        const displayImg = isLive ? currentUrl : "https://via.placeholder.com/400x600?text=No+Cover";
+
+        let imageOptionsHtml = `<option value="" ${!isLive ? 'selected' : ''}>🚫 No Cover (Remove)</option>`;
+        imageOptionsHtml += `<option value="CUSTOM">🔗 -- Paste Custom URL --</option>`;
+
+        let found = false;
+        getFilteredGithubImages().forEach(img => {
+            const sel = (currentUrl === img.url) ? 'selected' : '';
+            if (sel) found = true;
+            imageOptionsHtml += `<option value="${img.url}" ${sel}>[${img.format.toUpperCase()}] ${img.name}</option>`;
+        });
+        if (isLive && !found) {
+            imageOptionsHtml += `<option value="${currentUrl}" selected>🔗 Current Attached Cover</option>`;
+        }
+
         const card = document.createElement('div');
         card.className = 'subject-card';
 
@@ -1048,27 +1146,22 @@ function renderClassCoversGrid() {
             ? `<div class="status-badge status-live"><i class='bx bx-broadcast'></i> LIVE</div>` 
             : `<div class="status-badge status-offline"><i class='bx bx-archive-in'></i> NOT SET</div>`;
 
-        const actionsHtml = isLive
-            ? `<button class="btn-offline" onclick="removeClassCover('${cls}')"><i class='bx bx-cloud-download'></i> Remove Cover</button>`
-            : `<button class="btn-publish" onclick="publishClassCover('${cls}')"><i class='bx bx-cloud-upload'></i> Set Cover</button>`;
-
-        const previewBtn = `<button class="btn-preview" onclick="previewMaterial('${cls}', '${imgUrl}')" title="Preview App Layout"><i class='bx bx-mobile-alt'></i></button>`;
-
         card.innerHTML = `
             <div class="card-image-container">
-                <img src="${imgUrl}" alt="${cls}">
+                <img id="classCoverImg-${cls}" src="${displayImg}" alt="${cls}">
                 ${badge}
             </div>
             <div class="card-content">
                 <div class="card-title-wrapper" style="margin-bottom:8px;">
                     <div class="card-title">${cls}</div>
                 </div>
-                <select id="coverSelect-${cls}" class="card-select" ${isLive ? 'disabled' : ''}>
+                <select id="coverSelect-${cls}" class="card-select" onchange="previewClassCoverSelection('${cls}', this.value)">
                     ${imageOptionsHtml}
                 </select>
                 <div class="card-actions-row">
-                    ${previewBtn}
-                    ${actionsHtml}
+                    <button class="btn-preview" onclick="previewMaterial('${cls}', document.getElementById('classCoverImg-${cls}').src)" title="Preview"><i class='bx bx-mobile-alt'></i></button>
+                    <button class="btn-publish" onclick="publishClassCover('${cls}')"><i class='bx bx-save'></i> Save</button>
+                    ${isLive ? `<button class="btn-offline" onclick="removeClassCover('${cls}')" style="padding:8px 10px;" title="Remove"><i class='bx bx-trash'></i></button>` : ''}
                 </div>
             </div>
         `;
@@ -1314,43 +1407,84 @@ window.takeMaterialOffline = async (subjectName, currentClass) => {
     }
 };
 
-window.publishClassCover = async (className) => {
-    const selectBox = document.getElementById(`coverSelect-${className}`);
-    let imgUrl = selectBox.value;
-
-    if(!imgUrl) {
-        showToast("Please select an image or choose Custom URL.", "error");
-        return;
-    }
-
-    if (imgUrl === "CUSTOM") {
-        imgUrl = prompt(`Paste the custom image URL for ${className}:`);
-        if (!imgUrl || (!imgUrl.startsWith("http") && !imgUrl.startsWith("https"))) {
-            showToast("Invalid URL provided. Must start with http/https.", "error");
+window.previewClassCoverSelection = (className, val) => {
+    const sel = document.getElementById(`coverSelect-${className}`);
+    const imgEl = document.getElementById(`classCoverImg-${className}`);
+    if (val === "CUSTOM") {
+        const customUrl = prompt(`Paste custom cover image URL for ${className}:`);
+        if (!customUrl || !customUrl.startsWith("http")) {
+            sel.value = liveClassCovers[className] || "";
             return;
         }
+        const opt = document.createElement('option');
+        opt.value = customUrl.trim();
+        opt.text = "🔗 Custom URL";
+        opt.selected = true;
+        sel.appendChild(opt);
+        if (imgEl) imgEl.src = customUrl.trim();
+        return;
     }
+    if (imgEl) imgEl.src = val || "https://via.placeholder.com/400x600?text=No+Cover";
+};
+
+window.publishClassCover = async (className) => {
+    const selectBox = document.getElementById(`coverSelect-${className}`);
+    const imgUrl = selectBox ? selectBox.value : "";
+    if (!imgUrl) return removeClassCover(className);
+    if (imgUrl === "CUSTOM") return showToast("Paste a valid Custom URL first.", "error");
 
     try {
-        await setDoc(doc(db, "Admin", "ClassCovers"), {
-            [className]: imgUrl
-        }, { merge: true });
-        
-        showToast(`${className} cover updated!`, "success");
-        loadDashboard();
+        await setDoc(doc(db, "Admin", "ClassCovers"), { [className]: imgUrl }, { merge: true });
+        liveClassCovers[className] = imgUrl;
+        showToast(`${className} cover saved!`, "success");
+        renderClassCoversGrid();
+        renderInteractiveSimulator();
     } catch (e) {
-        showToast("Failed to set class cover.", "error");
+        showToast("Failed to save class cover.", "error");
+    }
+};
+
+window.saveAllClassCoversBulk = async () => {
+    const updates = {};
+    let changed = 0;
+    CLASSES.forEach(cls => {
+        const sel = document.getElementById(`coverSelect-${cls}`);
+        if (!sel) return;
+        const val = sel.value;
+        if (val === "CUSTOM") return;
+        const prev = liveClassCovers[cls] || "";
+        if (val !== prev) {
+            changed++;
+            if (val) {
+                updates[cls] = val;
+                liveClassCovers[cls] = val;
+            } else {
+                updates[cls] = deleteField();
+                delete liveClassCovers[cls];
+            }
+        }
+    });
+    if (changed === 0) return showToast("No class cover changes to save.", "error");
+
+    try {
+        await setDoc(doc(db, "Admin", "ClassCovers"), updates, { merge: true });
+        showToast(`✅ Saved ${changed} class cover(s) in 1 click!`, "success");
+        renderClassCoversGrid();
+        renderInteractiveSimulator();
+    } catch (e) {
+        console.error(e);
+        showToast("Bulk save failed.", "error");
     }
 };
 
 window.removeClassCover = async (className) => {
-    if(confirm(`Remove the cover image for ${className}? It will turn grey in the app.`)) {
+    if (confirm(`Remove the cover image for ${className}?`)) {
         try {
-            await updateDoc(doc(db, "Admin", "ClassCovers"), {
-                [className]: deleteField()
-            });
+            await updateDoc(doc(db, "Admin", "ClassCovers"), { [className]: deleteField() });
+            delete liveClassCovers[className];
             showToast(`Cover removed for ${className}.`, "error");
-            loadDashboard();
+            renderClassCoversGrid();
+            renderInteractiveSimulator();
         } catch (e) {
             showToast("Failed to remove cover.", "error");
         }
@@ -1574,6 +1708,67 @@ async function triggerCloudflarePush({ title, body, topic = "all_students", type
     }
 }
 
+function rebuildNoticeBoardStringFromHistory() {
+    if (!Array.isArray(portalConfig.sidebar_items) || portalConfig.sidebar_items.length === 0) {
+        portalConfig.sidebar_items = [{ title: "📢 ସୂଚନା ଫଳକ (Notice Board)", target: "" }];
+    }
+    const hist = Array.isArray(portalConfig.notice_history) ? portalConfig.notice_history : [];
+    const compiled = hist.length > 0
+        ? hist.map(n => `📌 ${n.title} (${n.date})\n${n.body}`).join("\n\n").slice(0, 2800)
+        : "ନୂତନ ଶିକ୍ଷାବର୍ଷ ପାଇଁ ସମସ୍ତ ବହି ଏବଂ AI ଶିକ୍ଷକ ଉପଲବ୍ଧ ଅଛି।";
+    portalConfig.sidebar_items[0] = {
+        title: portalConfig.sidebar_items[0]?.title || "📢 ସୂଚନା ଫଳକ (Notice Board)",
+        target: compiled
+    };
+}
+
+function renderAdminNoticesList() {
+    const el = document.getElementById("adminNoticesList");
+    if (!el) return;
+    el.innerHTML = "";
+    const hist = Array.isArray(portalConfig.notice_history) ? portalConfig.notice_history : [];
+    if (hist.length === 0) {
+        el.innerHTML = `<div style="font-size:12px; color:#94A3B8;">No notices sent yet.</div>`;
+        return;
+    }
+    hist.forEach((n, idx) => {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex; justify-content:space-between; align-items:center; background:#F4F7FE; padding:8px 10px; border-radius:10px; gap:8px;";
+        row.innerHTML = `
+            <div style="flex:1; min-width:0;">
+                <div style="font-size:12px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📌 ${n.title}</div>
+                <div style="font-size:10px; color:#64748B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${n.date} • ${n.topic || 'all_students'} • ${n.body}</div>
+            </div>
+            <button onclick="editSentNotice(${idx})" title="Fix Spelling / Edit" style="background:#FFF9E6; color:#D4AC0D; padding:5px 8px; border-radius:8px; font-size:12px;">✏️</button>
+            <button onclick="deleteSentNotice(${idx})" title="Pull Back / Delete from Notice Board" style="background:#FDE8E7; color:#EE5D50; padding:5px 8px; border-radius:8px; font-size:12px;">🗑️</button>
+        `;
+        el.appendChild(row);
+    });
+}
+
+window.editSentNotice = async (idx) => {
+    const n = portalConfig.notice_history?.[idx];
+    if (!n) return;
+    const newTitle = prompt("Edit Notice Title:", n.title);
+    if (newTitle === null) return;
+    const newBody = prompt("Edit Notice Message:", n.body);
+    if (newBody === null) return;
+    portalConfig.notice_history[idx] = { ...n, title: newTitle.trim(), body: newBody.trim() };
+    rebuildNoticeBoardStringFromHistory();
+    await savePortalConfigToFirebase();
+    renderAdminNoticesList();
+    showToast("Notice corrected live in app Notice Board!", "success");
+};
+
+window.deleteSentNotice = async (idx) => {
+    if (!confirm("Pull back and delete this notice from the app's Notice Board?")) return;
+    portalConfig.notice_history.splice(idx, 1);
+    rebuildNoticeBoardStringFromHistory();
+    await savePortalConfigToFirebase();
+    renderAdminNoticesList();
+    showToast("Notice removed from app Notice Board!", "error");
+};
+
 window.sendManualNoticeAndPush = async () => {
     const title = document.getElementById("pushTitleInput").value.trim();
     const body = document.getElementById("pushBodyInput").value.trim();
@@ -1583,24 +1778,24 @@ window.sendManualNoticeAndPush = async () => {
         return;
     }
 
-    // 1. Update Side Drawer Notice Board (sidebar_items[0]) in Firestore
-    if (!Array.isArray(portalConfig.sidebar_items) || portalConfig.sidebar_items.length === 0) {
-        portalConfig.sidebar_items = [{ title: "📢 ସୂଚନା ଫଳକ (Notice Board)", target: "" }];
-    }
-    const oldNotice = portalConfig.sidebar_items[0]?.target || "";
-    const stamp = new Date().toLocaleDateString("en-IN");
-    portalConfig.sidebar_items[0] = {
-        title: portalConfig.sidebar_items[0]?.title || "📢 ସୂଚନା ଫଳକ (Notice Board)",
-        target: `📌 ${title} (${stamp})\n${body}\n\n${oldNotice}`.slice(0, 2800)
-    };
+    if (!Array.isArray(portalConfig.notice_history)) portalConfig.notice_history = [];
+    portalConfig.notice_history.unshift({
+        id: `n_${Date.now()}`,
+        title,
+        body,
+        topic,
+        date: new Date().toLocaleDateString("en-IN")
+    });
+    if (portalConfig.notice_history.length > 25) portalConfig.notice_history.pop();
+    rebuildNoticeBoardStringFromHistory();
     await savePortalConfigToFirebase();
+    renderAdminNoticesList();
 
-    // 2. Push to locked student phones via Cloudflare Worker -> FCM
     const ok = await triggerCloudflarePush({ title, body, topic, type: "notice" });
     if (ok) {
         document.getElementById("pushTitleInput").value = "";
         document.getElementById("pushBodyInput").value = "";
-        showToast("Notice Board updated & Push Notification sent!", "success");
+        showToast(`✅ Notice published & Push sent to "${topic}"!`, "success");
     }
 };
 
@@ -1721,13 +1916,16 @@ window.publishExamPaper = async () => {
                 "ଚତୁର୍ଥ ଶ୍ରେଣୀ": "class_4", "ପଞ୍ଚମ ଶ୍ରେଣୀ": "class_5", "ଷଷ୍ଠ ଶ୍ରେଣୀ": "class_6",
                 "ସପ୍ତମ ଶ୍ରେଣୀ": "class_7", "ଅଷ୍ଟମ ଶ୍ରେଣୀ": "class_8", "ନବମ ଶ୍ରେଣୀ": "class_9", "ଦଶମ ଶ୍ରେଣୀ": "class_10"
             };
-            await triggerCloudflarePush({
+            const mode = document.getElementById("examPushTargetMode")?.value || "all";
+            const targetTopic = (mode === "class_only" && topicMap[targetClass]) ? topicMap[targetClass] : "all_students";
+            const pushed = await triggerCloudflarePush({
                 title: `📅 New Exam: ${title}`,
-                body: `${subjects.join(", ") || "All Subjects"}${examDate ? " • " + examDate : ""}`,
-                topic: topicMap[targetClass] || "all_students",
+                body: `${targetClass === "ALL" ? "All Classes" : targetClass} • ${subjects.join(", ") || "All Subjects"}${examDate ? " • " + examDate : ""}`,
+                topic: targetTopic,
                 type: "exam",
                 targetId: docId
             });
+            if (pushed) showToast(`🔔 Exam Push Notification sent to "${targetTopic}"!`, "success");
         }
     } catch (e) {
         console.error(e);
@@ -1829,5 +2027,198 @@ window.upgradeSubjectEdition = async (subjectName, className) => {
     } catch (e) {
         console.error(e);
         showToast("Failed to upgrade book edition.", "error");
+    }
+};
+
+// ==========================================
+// 16. BUILT-IN PDF READER + BULK SUBJECT ACTIONS + OLD BOOKS MANAGER
+// ==========================================
+window.openPdfReaderModal = (title, pdfUrl) => {
+    if (!pdfUrl) return showToast("No PDF attached to this item.", "error");
+    document.getElementById('pdfReaderTitle').innerText = `📄 ${title}`;
+    document.getElementById('pdfReaderNewTabLink').href = pdfUrl;
+    // Google Docs Viewer embeds GitHub Pages PDFs reliably in all browsers
+    document.getElementById('pdfReaderFrame').src = `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(pdfUrl)}`;
+    document.getElementById('pdfReaderModal').classList.remove('hidden');
+};
+
+window.closePdfReaderModal = () => {
+    document.getElementById('pdfReaderFrame').src = "";
+    document.getElementById('pdfReaderModal').classList.add('hidden');
+};
+
+window.moveLiveBookToOld = async (subjectName, className) => {
+    const item = globalMergedData[subjectName];
+    if (!item) return;
+    const choice = prompt(
+        `Move "${subjectName}" (${className}) to Old/Archived Books:\n\n` +
+        `• Paste a NEW PDF URL to replace it & archive this old one, OR\n` +
+        `• Leave BLANK and click OK to just move this book into Old Books (remove from Live):`,
+        ""
+    );
+    if (choice === null) return;
+
+    const oldEd = item.edition || "2026_v1";
+    const docRef = doc(db, "Curriculum", className);
+    try {
+        if (choice.trim()) {
+            const newEd = prompt("New Edition Tag (e.g., 2027_v1):", "2027_v1") || "2027_v1";
+            await updateDoc(docRef, {
+                archived_books: arrayUnion({ name: subjectName, edition: oldEd, pdf_url: item.pdfUrl, cover_url: item.imgUrl || "" }),
+                [`pdf_links.${subjectName}`]: choice.trim(),
+                [`book_editions.${subjectName}`]: newEd.trim()
+            });
+            showToast(`"${subjectName}" upgraded & old edition moved to Old Books!`, "success");
+        } else {
+            await updateDoc(docRef, {
+                archived_books: arrayUnion({ name: subjectName, edition: oldEd, pdf_url: item.pdfUrl, cover_url: item.imgUrl || "" }),
+                subjects: arrayRemove(subjectName),
+                [`pdf_links.${subjectName}`]: deleteField(),
+                [`image_links.${subjectName}`]: deleteField(),
+                [`book_editions.${subjectName}`]: deleteField()
+            });
+            showToast(`"${subjectName}" moved to Old Books!`, "success");
+        }
+        loadDashboard();
+    } catch (e) {
+        console.error(e);
+        showToast("Failed to archive book.", "error");
+    }
+};
+
+window.restoreOldBookToLive = async (archiveKey) => {
+    const arch = archivedBooksList.find(a => a.archiveKey === archiveKey);
+    if (!arch) return;
+    if (!confirm(`Restore "${arch.name} (${arch.edition})" back to Live books in ${arch.currentClass}?`)) return;
+    try {
+        const docRef = doc(db, "Curriculum", arch.currentClass);
+        await updateDoc(docRef, {
+            subjects: arrayUnion(arch.name),
+            [`pdf_links.${arch.name}`]: arch.pdfUrl,
+            [`image_links.${arch.name}`]: arch.imgUrl || "",
+            [`book_editions.${arch.name}`]: arch.edition,
+            archived_books: arrayRemove(arch.rawEntry)
+        });
+        showToast(`"${arch.name}" restored to Live!`, "success");
+        loadDashboard();
+    } catch (e) {
+        showToast("Failed to restore old book.", "error");
+    }
+};
+
+window.deleteArchivedBook = async (archiveKey) => {
+    const arch = archivedBooksList.find(a => a.archiveKey === archiveKey);
+    if (!arch) return;
+    if (!confirm(`Permanently delete old book "${arch.name} (${arch.edition})" from ${arch.currentClass}?`)) return;
+    try {
+        await updateDoc(doc(db, "Curriculum", arch.currentClass), {
+            archived_books: arrayRemove(arch.rawEntry)
+        });
+        showToast("Old book removed.", "error");
+        loadDashboard();
+    } catch (e) {
+        showToast("Failed to delete old book.", "error");
+    }
+};
+
+window.bulkPublishSelected = async () => {
+    const keys = Array.from(selectedMaterialKeys).filter(k => globalMergedData[k] && !globalMergedData[k].isLive);
+    if (keys.length === 0) return showToast("Select at least 1 OFFLINE file first!", "error");
+    const bulkClass = document.getElementById('bulkTargetClass').value;
+    if (!bulkClass) return showToast("Pick a Target Class in the Bulk Bar first!", "error");
+
+    try {
+        const docRef = doc(db, "Curriculum", bulkClass);
+        const updatePayload = {};
+        const namesToAdd = [];
+        keys.forEach(name => {
+            const item = globalMergedData[name];
+            const imgSel = document.getElementById(`imgSelect-${name}`);
+            const chosenImg = (imgSel && imgSel.value !== "CUSTOM") ? imgSel.value : (item.imgUrl || "");
+            namesToAdd.push(name);
+            updatePayload[`pdf_links.${name}`] = item.pdfUrl || "";
+            updatePayload[`image_links.${name}`] = chosenImg;
+            updatePayload[`book_editions.${name}`] = "2026_v1";
+        });
+        updatePayload.subjects = arrayUnion(...namesToAdd);
+
+        await updateDoc(docRef, updatePayload).catch(async (e) => {
+            if (e.code === 'not-found') {
+                const fresh = { subjects: namesToAdd, pdf_links: {}, image_links: {}, book_editions: {} };
+                namesToAdd.forEach(n => {
+                    fresh.pdf_links[n] = updatePayload[`pdf_links.${n}`];
+                    fresh.image_links[n] = updatePayload[`image_links.${n}`];
+                    fresh.book_editions[n] = "2026_v1";
+                });
+                await setDoc(docRef, fresh);
+            } else throw e;
+        });
+
+        selectedMaterialKeys.clear();
+        showToast(`🚀 Bulk published ${namesToAdd.length} item(s) to ${bulkClass}!`, "success");
+        loadDashboard();
+    } catch (e) {
+        console.error(e);
+        showToast("Bulk publish failed.", "error");
+    }
+};
+
+window.bulkTakeSelectedOffline = async () => {
+    const items = Array.from(selectedMaterialKeys).map(k => globalMergedData[k]).filter(i => i && i.isLive);
+    if (items.length === 0) return showToast("Select at least 1 LIVE book first!", "error");
+    if (!confirm(`Take ${items.length} selected book(s) offline?`)) return;
+
+    const byClass = {};
+    items.forEach(i => { (byClass[i.currentClass] ||= []).push(i.name); });
+    try {
+        for (const [cls, names] of Object.entries(byClass)) {
+            const payload = { subjects: arrayRemove(...names) };
+            names.forEach(n => {
+                payload[`pdf_links.${n}`] = deleteField();
+                payload[`image_links.${n}`] = deleteField();
+                payload[`book_editions.${n}`] = deleteField();
+            });
+            await updateDoc(doc(db, "Curriculum", cls), payload);
+        }
+        selectedMaterialKeys.clear();
+        showToast(`Taken ${items.length} book(s) offline.`, "error");
+        loadDashboard();
+    } catch (e) {
+        showToast("Bulk offline failed.", "error");
+    }
+};
+
+window.bulkMoveSelectedToOld = async () => {
+    const items = Array.from(selectedMaterialKeys).map(k => globalMergedData[k]).filter(i => i && i.isLive && i.pdfUrl);
+    if (items.length === 0) return showToast("Select at least 1 LIVE PDF book first!", "error");
+    if (!confirm(`Move ${items.length} selected Live book(s) to Old / Archived Books?`)) return;
+
+    const byClass = {};
+    items.forEach(i => { (byClass[i.currentClass] ||= []).push(i); });
+    try {
+        for (const [cls, list] of Object.entries(byClass)) {
+            const names = list.map(i => i.name);
+            const archiveEntries = list.map(i => ({
+                name: i.name,
+                edition: i.edition || "2026_v1",
+                pdf_url: i.pdfUrl,
+                cover_url: i.imgUrl || ""
+            }));
+            const payload = {
+                subjects: arrayRemove(...names),
+                archived_books: arrayUnion(...archiveEntries)
+            };
+            names.forEach(n => {
+                payload[`pdf_links.${n}`] = deleteField();
+                payload[`image_links.${n}`] = deleteField();
+                payload[`book_editions.${n}`] = deleteField();
+            });
+            await updateDoc(doc(db, "Curriculum", cls), payload);
+        }
+        selectedMaterialKeys.clear();
+        showToast(`📦 Moved ${items.length} book(s) to Old Books!`, "success");
+        loadDashboard();
+    } catch (e) {
+        showToast("Bulk archive failed.", "error");
     }
 };
