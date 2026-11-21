@@ -140,8 +140,16 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
         dashboardSection.classList.remove('hidden');
         loadDashboard();
     } catch (e) {
-        console.error(e);
-        document.getElementById('loginError').innerText = "Invalid admin email or password.";
+        console.error("Firebase Auth Error:", e.code, e.message);
+        const msgMap = {
+            "auth/invalid-credential": "Wrong email or password (check spelling & capital letters in Firebase Users).",
+            "auth/user-not-found": "No user with this email exists in Odia Learning Platform → Authentication → Users.",
+            "auth/wrong-password": "Incorrect password (passwords are case-sensitive).",
+            "auth/unauthorized-domain": "Domain not allowed: add excellentinstitute.github.io in Firebase Auth → Settings → Authorized domains.",
+            "auth/operation-not-allowed": "Email/Password sign-in is OFF in Firebase Auth → Sign-in method.",
+            "auth/operation-not-supported-in-this-environment": "Cannot log in from local file:// — open your live GitHub Pages URL instead."
+        };
+        document.getElementById('loginError').innerText = msgMap[e.code] || `Login error (${e.code}): ${e.message}`;
         btn.innerHTML = `Unlock System <i class='bx bx-right-arrow-alt'></i>`;
     }
 });
