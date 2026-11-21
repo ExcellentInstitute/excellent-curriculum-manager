@@ -290,9 +290,11 @@
                                 </select>
                                 <button class="btn-primary" onclick="sendManualNoticeAndPush()" style="flex:1;">🚀 Send Notice + Push</button>
                             </div>
-                            <button class="btn-secondary" onclick="resetAdminPushSecret()" style="width:100%; font-size:12px; padding:6px;">
+                            <button class="btn-secondary" onclick="resetAdminPushSecret()" style="width:100%; font-size:12px; padding:6px; margin-bottom:12px;">
                                 🔑 Change / Reset Cloudflare Push Secret
                             </button>
+                            <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">Sent Notices on Notice Board (Edit or Pull Back anytime):</div>
+                            <div id="adminNoticesList" style="display:flex; flex-direction:column; gap:6px; max-height:190px; overflow-y:auto;"></div>
                         </div>
 
                         <!-- EXAM ROUTINE & QUESTION PAPER PUBLISHER (Class-Wise, 3 Formats + Manage List) -->
@@ -356,9 +358,15 @@
                             <!-- Mode 3: HTML Webpage Link -->
                             <input id="examHtmlUrlInput" class="hidden" placeholder="https://excellentinstitute.github.io/..." style="width:100%;padding:8px;margin-bottom:8px;border:1px solid #cbd5e1;border-radius:8px;">
 
-                            <label style="font-size:12px; display:flex; align-items:center; gap:6px; margin-bottom:10px; cursor:pointer;">
-                                <input type="checkbox" id="chkPushExamAlert" checked> 🔔 Also send Push Notification to target students
-                            </label>
+                            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+                                <label style="font-size:12px; display:flex; align-items:center; gap:6px; cursor:pointer;">
+                                    <input type="checkbox" id="chkPushExamAlert" checked> 🔔 Send Push Alert
+                                </label>
+                                <select id="examPushTargetMode" style="padding:6px 8px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px;">
+                                    <option value="all">To: All Students (Recommended)</option>
+                                    <option value="class_only">To: Selected Class Topic Only</option>
+                                </select>
+                            </div>
                             <button class="btn-primary" onclick="publishExamPaper()" style="width:100%; margin-bottom:14px;">📤 Publish Exam Paper</button>
 
                             <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">Published Exam Papers (Live in App):</div>
@@ -376,6 +384,9 @@
                                 </button>
                                 <button class="btn-secondary" onclick="setBackupPdfMirror()" style="flex: 1; border-color:#3B82F6; color:#3B82F6;">
                                     <i class='bx bx-cloud'></i> Backup PDF Mirror
+                                </button>
+                                <button class="btn-secondary" onclick="editSimField('privacy_policy_url', 'Privacy Policy URL (Play Store Required)')" style="width:100%; border-color:#05CD99; color:#05CD99;">
+                                    <i class='bx bx-shield-quarter'></i> Edit Privacy Policy Link
                                 </button>
                             </div>
                         </div>
@@ -407,6 +418,15 @@
                         </select>
                     </div>
                     <div class="filter-box">
+                        <i class='bx bx-layer'></i>
+                        <select id="statusFilter" onchange="renderMaterialGrid()">
+                            <option value="ALL">All Books (Live + Offline + Old)</option>
+                            <option value="LIVE">🟢 Current (Live) Books</option>
+                            <option value="OFFLINE">🟡 Offline / Pending Files</option>
+                            <option value="OLD">📦 Old / Archived Books</option>
+                        </select>
+                    </div>
+                    <div class="filter-box">
                         <i class='bx bx-image'></i>
                         <select id="imageFormatFilter" onchange="syncImageFormatFilter(this.value)">
                             <option value="ALL">All Formats (.webp / .png / .jpg)</option>
@@ -423,6 +443,30 @@
                     </button>
                 </section>
 
+                <!-- FAST BULK ACTION BAR (Work on multiple files in 1 click!) -->
+                <div style="background:white; padding:12px 16px; border-radius:14px; margin-bottom:14px; box-shadow:var(--shadow-soft); display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <label style="font-size:13px; font-weight:700; display:flex; align-items:center; gap:6px; cursor:pointer;">
+                        <input type="checkbox" id="chkSelectAllMaterials" onchange="toggleSelectAllVisible(this.checked)"> Select All Visible
+                    </label>
+                    <span id="bulkSelectedCount" style="font-size:12px; color:#4318FF; font-weight:700;">0 selected</span>
+                    <select id="bulkTargetClass" style="padding:7px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px;">
+                        <option value="">-- Pick Class for Bulk Publish --</option>
+                        <option value="ପ୍ରଥମ ଶ୍ରେଣୀ">ପ୍ରଥମ ଶ୍ରେଣୀ (Class 1)</option>
+                        <option value="ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ">ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ (Class 2)</option>
+                        <option value="ତୃତୀୟ ଶ୍ରେଣୀ">ତୃତୀୟ ଶ୍ରେଣୀ (Class 3)</option>
+                        <option value="ଚତୁର୍ଥ ଶ୍ରେଣୀ">ଚତୁର୍ଥ ଶ୍ରେଣୀ (Class 4)</option>
+                        <option value="ପଞ୍ଚମ ଶ୍ରେଣୀ">ପଞ୍ଚମ ଶ୍ରେଣୀ (Class 5)</option>
+                        <option value="ଷଷ୍ଠ ଶ୍ରେଣୀ">ଷଷ୍ଠ ଶ୍ରେଣୀ (Class 6)</option>
+                        <option value="ସପ୍ତମ ଶ୍ରେଣୀ">ସପ୍ତମ ଶ୍ରେଣୀ (Class 7)</option>
+                        <option value="ଅଷ୍ଟମ ଶ୍ରେଣୀ">ଅଷ୍ଟମ ଶ୍ରେଣୀ (Class 8)</option>
+                        <option value="ନବମ ଶ୍ରେଣୀ">ନବମ ଶ୍ରେଣୀ (Class 9)</option>
+                        <option value="ଦଶମ ଶ୍ରେଣୀ">ଦଶମ ଶ୍ରେଣୀ (Class 10)</option>
+                    </select>
+                    <button class="btn-primary" onclick="bulkPublishSelected()" style="padding:7px 14px; font-size:12px;">🚀 Bulk Publish</button>
+                    <button class="btn-secondary" onclick="bulkMoveSelectedToOld()" style="padding:7px 14px; font-size:12px; border-color:#FF8F00; color:#FF8F00;">📦 Bulk Move to Old</button>
+                    <button class="btn-secondary" onclick="bulkTakeSelectedOffline()" style="padding:7px 14px; font-size:12px; border-color:#EE5D50; color:#EE5D50;">📥 Bulk Offline</button>
+                </div>
+
                 <div id="systemStatus" class="status-indicator">
                     <i class='bx bx-loader-alt bx-spin'></i> Initializing Command Center...
                 </div>
@@ -437,14 +481,19 @@
                         <h2 style="font-size: 20px; color: var(--text-main);">Class Cover Manager</h2>
                         <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Assign repository images (.webp, .png, .jpg) or paste a custom URL for the Android home screen.</p>
                     </div>
-                    <div class="filter-box">
-                        <i class='bx bx-image'></i>
-                        <select id="classImageFormatFilter" onchange="syncImageFormatFilter(this.value)">
-                            <option value="ALL">All Formats (.webp / .png / .jpg)</option>
-                            <option value="webp">.webp Only</option>
-                            <option value="png">.png Only</option>
-                            <option value="jpeg">.jpg / .jpeg Only</option>
-                        </select>
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        <div class="filter-box">
+                            <i class='bx bx-image'></i>
+                            <select id="classImageFormatFilter" onchange="syncImageFormatFilter(this.value)">
+                                <option value="ALL">All Formats (.webp / .png / .jpg)</option>
+                                <option value="webp">.webp Only</option>
+                                <option value="png">.png Only</option>
+                                <option value="jpeg">.jpg / .jpeg Only</option>
+                            </select>
+                        </div>
+                        <button class="btn-primary" onclick="saveAllClassCoversBulk()" style="padding:10px 18px;">
+                            <i class='bx bx-save'></i> Save All Class Covers (1-Click)
+                        </button>
                     </div>
                 </div>
                 <section id="class-covers-grid" class="content-grid"></section>
@@ -524,6 +573,20 @@
                     <i class='bx bx-download'></i> Download Cropped Image
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- BUILT-IN PDF READER MODAL (Verify PDFs directly on Webpage!) -->
+    <div id="pdfReaderModal" class="modal-overlay hidden">
+        <div class="modal-card" style="max-width: 960px; width: 96%; height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header" style="margin-bottom: 10px;">
+                <h3 id="pdfReaderTitle" style="margin:0;">📄 PDF Reader</h3>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <a id="pdfReaderNewTabLink" href="#" target="_blank" class="btn-secondary" style="padding:6px 12px; font-size:12px; text-decoration:none;">Open New Tab ↗</a>
+                    <button class="btn-icon" onclick="closePdfReaderModal()"><i class='bx bx-x'></i></button>
+                </div>
+            </div>
+            <iframe id="pdfReaderFrame" src="" style="flex:1; width:100%; border:1px solid #cbd5e1; border-radius:10px; background:#f8fafc;"></iframe>
         </div>
     </div>
 
