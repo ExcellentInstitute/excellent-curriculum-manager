@@ -927,7 +927,7 @@ window.setBackupPdfMirror = async () => {
 // ==========================================
 // 6. RENDER MATERIAL GRID & STATS (TAB 1)
 // ==========================================
-window.renderMaterialGrid = function renderMaterialGrid() {
+function renderMaterialGrid() {
     const contentGrid = document.getElementById('content-grid');
     contentGrid.innerHTML = '';
     const searchQuery = document.getElementById('searchInput').value.toLowerCase();
@@ -968,7 +968,8 @@ window.renderMaterialGrid = function renderMaterialGrid() {
     document.getElementById('statOfflineCount').innerText = offlineCount;
     document.getElementById('statTotalCount').innerText = totalCount + archivedBooksList.length;
     updateBulkCountLabel();
-};
+}
+window.renderMaterialGrid = renderMaterialGrid;
 
 function getFilteredGithubImages() {
     return allGithubImages.filter(img =>
