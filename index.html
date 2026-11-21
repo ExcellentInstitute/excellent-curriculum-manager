@@ -39,7 +39,7 @@
                 <div class="brand-logo small"><i class='bx bxs-graduation'></i></div>
                 <div>
                     <h3>Command Center</h3>
-                    <span class="version-tag">Deployment Engine v7.0 (Playlists + Live Archive + AI Control)</span>
+                    <span class="version-tag">Deployment Engine v8.0 (Cloudflare Push + Exams + WebP + Editions)</span>
                 </div>
             </div>
             <div class="nav-actions">
@@ -263,14 +263,116 @@
                             </div>
                         </div>
 
+                        <!-- PUSH NOTIFICATION BROADCASTER (Connected to Side Drawer Notice Board) -->
                         <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-soft);">
-                            <h3 style="margin-bottom: 6px;">🦊 Foxy AI Config & PDF Backup Mirror</h3>
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
+                                <h3 style="margin:0;">🔔 Push Notification & Notice Board</h3>
+                                <span id="quietHoursBadge" style="font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; background:#E6FBF5; color:#05CD99;">Checking IST...</span>
+                            </div>
+                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">
+                                Wakes up locked student phones via Cloudflare Worker + FCM & updates the app's Side Drawer Notice Board. Regulated Quiet Hours: <b>9:00 PM – 7:00 AM IST</b>.
+                            </p>
+                            <input id="pushTitleInput" placeholder="Notification Title (e.g., 📢 Sunday Test Notice)" maxlength="90" style="width:100%;padding:9px;margin-bottom:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                            <textarea id="pushBodyInput" rows="3" placeholder="Message (supports Odia, English & Emojis)..." maxlength="220" style="width:100%;padding:9px;margin-bottom:8px;border:1px solid #cbd5e1;border-radius:8px;font-family:inherit;"></textarea>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+                                <select id="pushTopicSelect" style="flex:1;padding:9px;border:1px solid #cbd5e1;border-radius:8px;">
+                                    <option value="all_students">All Students (Class 1–10)</option>
+                                    <option value="class_1">Class 1 (ପ୍ରଥମ ଶ୍ରେଣୀ)</option>
+                                    <option value="class_2">Class 2 (ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ)</option>
+                                    <option value="class_3">Class 3 (ତୃତୀୟ ଶ୍ରେଣୀ)</option>
+                                    <option value="class_4">Class 4 (ଚତୁର୍ଥ ଶ୍ରେଣୀ)</option>
+                                    <option value="class_5">Class 5 (ପଞ୍ଚମ ଶ୍ରେଣୀ)</option>
+                                    <option value="class_6">Class 6 (ଷଷ୍ଠ ଶ୍ରେଣୀ)</option>
+                                    <option value="class_7">Class 7 (ସପ୍ତମ ଶ୍ରେଣୀ)</option>
+                                    <option value="class_8">Class 8 (ଅଷ୍ଟମ ଶ୍ରେଣୀ)</option>
+                                    <option value="class_9">Class 9 (ନବମ ଶ୍ରେଣୀ)</option>
+                                    <option value="class_10">Class 10 (ଦଶମ ଶ୍ରେଣୀ)</option>
+                                </select>
+                                <button class="btn-primary" onclick="sendManualNoticeAndPush()" style="flex:1;">🚀 Send Notice + Push</button>
+                            </div>
+                            <button class="btn-secondary" onclick="resetAdminPushSecret()" style="width:100%; font-size:12px; padding:6px;">
+                                🔑 Change / Reset Cloudflare Push Secret
+                            </button>
+                        </div>
+
+                        <!-- EXAM ROUTINE & QUESTION PAPER PUBLISHER (Class-Wise, 3 Formats + Manage List) -->
+                        <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-soft);">
+                            <h3 style="margin-bottom: 6px;">📅 Exam Routine & Question Papers</h3>
+                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">
+                                Publish class-wise 1-subject or multi-subject exams in Rich Text (Bold/Italic/Emoji), Raw Question Images, or HTML Link.
+                            </p>
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+                                <input id="examTitleInput" placeholder="Exam Title (e.g., Unit Test 1)" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                                <input id="examDateInput" placeholder="Date (e.g., 25 Nov 2026)" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                                <select id="examClassSelect" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                                    <option value="ALL">All Classes (1–10)</option>
+                                    <option value="ପ୍ରଥମ ଶ୍ରେଣୀ">Class 1 (ପ୍ରଥମ ଶ୍ରେଣୀ)</option>
+                                    <option value="ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ">Class 2 (ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ)</option>
+                                    <option value="ତୃତୀୟ ଶ୍ରେଣୀ">Class 3 (ତୃତୀୟ ଶ୍ରେଣୀ)</option>
+                                    <option value="ଚତୁର୍ଥ ଶ୍ରେଣୀ">Class 4 (ଚତୁର୍ଥ ଶ୍ରେଣୀ)</option>
+                                    <option value="ପଞ୍ଚମ ଶ୍ରେଣୀ">Class 5 (ପଞ୍ଚମ ଶ୍ରେଣୀ)</option>
+                                    <option value="ଷଷ୍ଠ ଶ୍ରେଣୀ">Class 6 (ଷଷ୍ଠ ଶ୍ରେଣୀ)</option>
+                                    <option value="ସପ୍ତମ ଶ୍ରେଣୀ">Class 7 (ସପ୍ତମ ଶ୍ରେଣୀ)</option>
+                                    <option value="ଅଷ୍ଟମ ଶ୍ରେଣୀ">Class 8 (ଅଷ୍ଟମ ଶ୍ରେଣୀ)</option>
+                                    <option value="ନବମ ଶ୍ରେଣୀ">Class 9 (ନବମ ଶ୍ରେଣୀ)</option>
+                                    <option value="ଦଶମ ଶ୍ରେଣୀ">Class 10 (ଦଶମ ଶ୍ରେଣୀ)</option>
+                                </select>
+                                <select id="examFormatSelect" onchange="toggleExamFormatInputs()" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                                    <option value="richtext">📝 Organized Rich Text</option>
+                                    <option value="images">🖼️ Raw Question Images</option>
+                                    <option value="html">🌐 HTML Webpage Link</option>
+                                </select>
+                            </div>
+                            <input id="examSubjectsInput" placeholder="Subject(s) comma-separated (e.g., Math, Science, Odia)" style="width:100%;padding:8px;margin-bottom:8px;border:1px solid #cbd5e1;border-radius:8px;">
+
+                            <!-- Mode 1: Rich Formatted Text Editor -->
+                            <div id="examRichTextWrap">
+                                <div style="display:flex; gap:5px; margin-bottom:6px; flex-wrap:wrap;">
+                                    <button type="button" onclick="formatExamText('bold')" style="padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;"><b>B</b></button>
+                                    <button type="button" onclick="formatExamText('italic')" style="padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;"><i>I</i></button>
+                                    <button type="button" onclick="formatExamText('underline')" style="padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;"><u>U</u></button>
+                                    <button type="button" onclick="formatExamText('insertUnorderedList')" style="padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;">• List</button>
+                                    <button type="button" onclick="formatExamText('insertOrderedList')" style="padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;">1. List</button>
+                                    <button type="button" onclick="insertExamEmoji('📝 ')" style="padding:4px 7px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">📝</button>
+                                    <button type="button" onclick="insertExamEmoji('⏰ ')" style="padding:4px 7px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">⏰</button>
+                                    <button type="button" onclick="insertExamEmoji('✅ ')" style="padding:4px 7px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">✅</button>
+                                    <button type="button" onclick="insertExamEmoji('⭐ ')" style="padding:4px 7px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">⭐</button>
+                                    <button type="button" onclick="insertExamEmoji('📅 ')" style="padding:4px 7px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">📅</button>
+                                </div>
+                                <div id="examRichEditor" contenteditable="true" style="min-height:110px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;margin-bottom:8px;font-size:13px;line-height:1.5;"></div>
+                            </div>
+
+                            <!-- Mode 2: Raw Question Paper Images -->
+                            <div id="examImagesWrap" class="hidden" style="margin-bottom:8px;">
+                                <div style="display:flex; gap:6px; margin-bottom:6px;">
+                                    <select id="examRepoImgPicker" style="flex:1;padding:7px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;">
+                                        <option value="">-- Quick Add Image from GitHub Repo --</option>
+                                    </select>
+                                    <button type="button" onclick="insertGithubImgToExam()" class="btn-secondary" style="padding:6px 10px;font-size:12px;">+ Add</button>
+                                </div>
+                                <textarea id="examImagesInput" rows="3" placeholder="Paste question paper image URLs (1 per line — supports .webp, .png, .jpg)..." style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-family:inherit;"></textarea>
+                            </div>
+
+                            <!-- Mode 3: HTML Webpage Link -->
+                            <input id="examHtmlUrlInput" class="hidden" placeholder="https://excellentinstitute.github.io/..." style="width:100%;padding:8px;margin-bottom:8px;border:1px solid #cbd5e1;border-radius:8px;">
+
+                            <label style="font-size:12px; display:flex; align-items:center; gap:6px; margin-bottom:10px; cursor:pointer;">
+                                <input type="checkbox" id="chkPushExamAlert" checked> 🔔 Also send Push Notification to target students
+                            </label>
+                            <button class="btn-primary" onclick="publishExamPaper()" style="width:100%; margin-bottom:14px;">📤 Publish Exam Paper</button>
+
+                            <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">Published Exam Papers (Live in App):</div>
+                            <div id="adminExamPapersList" style="display:flex; flex-direction:column; gap:6px; max-height:180px; overflow-y:auto;"></div>
+                        </div>
+
+                        <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-soft);">
+                            <h3 style="margin-bottom: 6px;">🦊 Foxy AI Quota & PDF Backup Mirror</h3>
                             <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-                                Control the remote Pro daily limit switch, swap Gemini API keys without updating the APK, or link a free Cloudflare R2 PDF backup mirror.
+                                Toggle the remote Pro daily quota switch (API keys are safely locked inside Cloudflare Worker Secrets) or link a free backup PDF mirror.
                             </p>
                             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                                 <button class="btn-secondary" onclick="manageAiConfigAndProSwitch()" style="flex: 1; border-color:#FF8F00; color:#FF8F00;">
-                                    <i class='bx bx-bot'></i> AI Keys & Pro Switch
+                                    <i class='bx bx-bot'></i> Pro Quota Switch
                                 </button>
                                 <button class="btn-secondary" onclick="setBackupPdfMirror()" style="flex: 1; border-color:#3B82F6; color:#3B82F6;">
                                     <i class='bx bx-cloud'></i> Backup PDF Mirror
@@ -304,6 +406,18 @@
                             <option value="ଦଶମ ଶ୍ରେଣୀ">ଦଶମ ଶ୍ରେଣୀ (Class 10)</option>
                         </select>
                     </div>
+                    <div class="filter-box">
+                        <i class='bx bx-image'></i>
+                        <select id="imageFormatFilter" onchange="syncImageFormatFilter(this.value)">
+                            <option value="ALL">All Formats (.webp / .png / .jpg)</option>
+                            <option value="webp">.webp Only</option>
+                            <option value="png">.png Only</option>
+                            <option value="jpeg">.jpg / .jpeg Only</option>
+                        </select>
+                    </div>
+                    <button class="btn-secondary" onclick="publishCustomStandaloneMaterial()" style="border-color:#05CD99; color:#05CD99;">
+                        <i class='bx bx-plus'></i> Add PDF / Image Only
+                    </button>
                     <button id="refreshBtn" class="btn-secondary">
                         <i class='bx bx-refresh'></i> Sync Repo
                     </button>
@@ -318,9 +432,20 @@
 
             <!-- TAB 2: MANAGE CLASS COVERS -->
             <div id="classCoversView" class="view-section hidden">
-                <div class="section-header" style="margin-bottom: 24px;">
-                    <h2 style="font-size: 20px; color: var(--text-main);">Class Cover Manager</h2>
-                    <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Assign repository images or paste a custom URL to customize the Android home screen.</p>
+                <div class="section-header" style="margin-bottom: 24px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <h2 style="font-size: 20px; color: var(--text-main);">Class Cover Manager</h2>
+                        <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Assign repository images (.webp, .png, .jpg) or paste a custom URL for the Android home screen.</p>
+                    </div>
+                    <div class="filter-box">
+                        <i class='bx bx-image'></i>
+                        <select id="classImageFormatFilter" onchange="syncImageFormatFilter(this.value)">
+                            <option value="ALL">All Formats (.webp / .png / .jpg)</option>
+                            <option value="webp">.webp Only</option>
+                            <option value="png">.png Only</option>
+                            <option value="jpeg">.jpg / .jpeg Only</option>
+                        </select>
+                    </div>
                 </div>
                 <section id="class-covers-grid" class="content-grid"></section>
             </div>
@@ -385,6 +510,13 @@
             <div class="crop-container" style="height: 400px; background: #e9ecef; border-radius: 8px; overflow: hidden; display: flex; justify-content: center; align-items: center;">
                 <img id="cropImageTarget" style="max-width: 100%; display: none;">
                 <span id="cropPlaceholderText" style="color: #6c757d;">Select an image to start cropping</span>
+            </div>
+            <div style="margin-top: 12px;">
+                <select id="cropExportFormat" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #cbd5e1; font-size:13px;">
+                    <option value="image/webp">Export as .webp (Smallest File — Best for App)</option>
+                    <option value="image/png">Export as .png (Lossless / Transparent)</option>
+                    <option value="image/jpeg">Export as .jpg (Standard JPEG)</option>
+                </select>
             </div>
             <div class="modal-actions">
                 <button class="btn-secondary" onclick="closeCropModal()">Cancel</button>
