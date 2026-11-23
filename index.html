@@ -43,7 +43,7 @@
                 <div class="brand-logo small"><i class='bx bxs-graduation'></i></div>
                 <div>
                     <h3>Command Center</h3>
-                    <span class="version-tag">Deployment Engine v8.0 (Cloudflare Push + Exams + WebP + Editions)</span>
+                    <span class="version-tag">Deployment Engine v9.0 (GitHub Releases PDF Engine + Push + Exams + Editions)</span>
                 </div>
             </div>
             <div class="nav-actions">
@@ -431,6 +431,12 @@
                         </select>
                     </div>
                     <div class="filter-box">
+                        <i class='bx bx-purchase-tag'></i>
+                        <select id="releaseFilter" onchange="renderMaterialGrid()">
+                            <option value="ALL">All Releases / Sources</option>
+                        </select>
+                    </div>
+                    <div class="filter-box">
                         <i class='bx bx-image'></i>
                         <select id="imageFormatFilter" onchange="syncImageFormatFilter(this.value)">
                             <option value="ALL">All Formats (.webp / .png / .jpg)</option>
@@ -439,11 +445,14 @@
                             <option value="jpeg">.jpg / .jpeg Only</option>
                         </select>
                     </div>
+                    <button class="btn-secondary" onclick="migrateOldLinksToReleases()" style="border-color:#4318FF; color:#4318FF;">
+                        <i class='bx bx-transfer'></i> Migrate Old Links → Assets
+                    </button>
                     <button class="btn-secondary" onclick="publishCustomStandaloneMaterial()" style="border-color:#05CD99; color:#05CD99;">
                         <i class='bx bx-plus'></i> Add PDF / Image Only
                     </button>
                     <button id="refreshBtn" class="btn-secondary">
-                        <i class='bx bx-refresh'></i> Sync Repo
+                        <i class='bx bx-refresh'></i> Sync Releases &amp; Repo
                     </button>
                 </section>
 
@@ -523,6 +532,42 @@
         </div>
     </div>
 
+    <!-- UPGRADE TO NEW BOOK / MOVE TO OLD BOOKS MODAL (AUTO-PICKS FROM RELEASE ASSETS) -->
+    <div id="upgradeBookModal" class="modal-overlay hidden">
+        <div class="modal-card" style="max-width: 520px; width: 95%;">
+            <div class="modal-header">
+                <h3>📦 Current Book → New / Old Edition</h3>
+                <button class="btn-icon" onclick="closeUpgradeBookModal()"><i class='bx bx-x'></i></button>
+            </div>
+            <p id="upgradeBookSubtitle" class="modal-subtitle">Archive current edition or replace with a new PDF from GitHub Releases Assets.</p>
+            <input type="hidden" id="upgradeSubjectName">
+            <input type="hidden" id="upgradeClassName">
+
+            <div style="margin-top: 14px;">
+                <label style="font-size: 12px; font-weight: 700; color: #475569; display:block; margin-bottom:6px;">Select Action:</label>
+                <select id="upgradeActionMode" onchange="toggleUpgradeModeFields()" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cbd5e1; margin-bottom:12px;">
+                    <option value="UPGRADE">✨ Upgrade to New Book PDF (Archives Current Book to Old Books)</option>
+                    <option value="ARCHIVE_ONLY">📦 Move to Old Books Only (Removes from Current Live Books)</option>
+                </select>
+
+                <div id="upgradeNewBookFields">
+                    <label style="font-size: 12px; font-weight: 700; color: #475569; display:block; margin-bottom:6px;">Pick New PDF from GitHub Releases Assets:</label>
+                    <select id="upgradePdfSelect" onchange="onUpgradePdfAssetSelected()" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cbd5e1; margin-bottom:10px;"></select>
+
+                    <input type="text" id="upgradeCustomPdfInput" class="hidden" placeholder="Paste custom https:// PDF URL..." style="width:100%; padding:10px; border-radius:8px; border:1px solid #cbd5e1; margin-bottom:10px;">
+
+                    <label style="font-size: 12px; font-weight: 700; color: #475569; display:block; margin-bottom:6px;">New Edition Tag (e.g., 2027_v1 or Release Tag):</label>
+                    <input type="text" id="upgradeEditionInput" value="2027_v1" placeholder="e.g. 2027_v1" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cbd5e1;">
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 18px;">
+                <button class="btn-secondary" onclick="closeUpgradeBookModal()">Cancel</button>
+                <button class="btn-primary" onclick="confirmUpgradeOrArchiveBook()">Apply Changes</button>
+            </div>
+        </div>
+    </div>
+
     <div id="previewModal" class="modal-overlay hidden">
         <div class="modal-card preview-card" style="max-width: 500px;">
             <div class="modal-header">
@@ -589,6 +634,9 @@
                     <a id="pdfReaderNewTabLink" href="#" target="_blank" class="btn-secondary" style="padding:6px 12px; font-size:12px; text-decoration:none;">Open New Tab ↗</a>
                     <button class="btn-icon" onclick="closePdfReaderModal()"><i class='bx bx-x'></i></button>
                 </div>
+            </div>
+            <div id="pdfReaderLargeNotice" class="hidden" style="background:#FEF3C7; color:#92400E; padding:8px 12px; border-radius:8px; font-size:12px; margin-bottom:8px;">
+                ⚠️ Large PDF (&gt;20 MB): Browser preview may not render oversized files. Click <b>Open New Tab ↗</b> above to verify directly.
             </div>
             <iframe id="pdfReaderFrame" src="" style="flex:1; width:100%; border:1px solid #cbd5e1; border-radius:10px; background:#f8fafc;"></iframe>
         </div>
