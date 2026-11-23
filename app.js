@@ -3,7 +3,7 @@
 // ==========================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-import { getFirestore, doc, updateDoc, setDoc, arrayUnion, arrayRemove, deleteField, getDoc, collection, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getFirestore, doc, updateDoc, setDoc, arrayUnion, arrayRemove, deleteField, FieldPath, getDoc, collection, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 // ==========================================
 // 2. CONFIGURATIONS
@@ -32,10 +32,50 @@ const CLASSES = ["ପ୍ରଥମ ଶ୍ରେଣୀ", "ଦ୍ୱିତୀୟ �
 let globalMergedData = {};
 let liveClassCovers = {};
 let allGithubImages = [];
+let allReleasePdfs = [];
+let availableReleaseTags = [];
 let publishedExamPapers = [];
 let archivedBooksList = [];
 let selectedMaterialKeys = new Set();
 let activeImageFormatFilter = "ALL";
+
+function cleanReleaseDisplayName(rawFileName) {
+    let decoded = String(rawFileName || "");
+    try { decoded = decodeURIComponent(decoded); } catch (_) {}
+    // GitHub Releases replaces spaces with dots in asset names -> restore clean readable title with zero dots
+    return decoded
+        .replace(/\.pdf$/i, '')
+        .replace(/\.+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function normalizeBookKey(rawName) {
+    let decoded = String(rawName || "");
+    try { decoded = decodeURIComponent(decoded); } catch (_) {}
+    return decoded
+        .split('/').pop()
+        .replace(/\.pdf$/i, '')
+        .replace(/-cover/i, '')
+        .replace(/\.(webp|png|jpg|jpeg)$/i, '')
+        .replace(/[._\-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
+function formatBytes(bytes) {
+    const num = Number(bytes || 0);
+    if (!num) return "";
+    if (num >= 1024 * 1024) return `${(num / (1024 * 1024)).toFixed(1)} MB`;
+    return `${Math.round(num / 1024)} KB`;
+}
+
+function findLiveItem(subjectName, className) {
+    return Object.values(globalMergedData).find(
+        m => m.isLive && m.name === subjectName && m.currentClass === className
+    );
+}
 let portalConfig = {
     privacy_policy_url: "https://excellentinstitute.github.io/excellent-curriculum-manager/privacy-policy.html",
     notice_history: [],
@@ -116,6 +156,7 @@ document.getElementById('searchInput').addEventListener('input', renderMaterialG
 document.getElementById('classFilter').addEventListener('change', renderMaterialGrid);
 document.getElementById('refreshBtn').addEventListener('click', () => {
     sessionStorage.removeItem('gh_materials_cache');
+    sessionStorage.removeItem('gh_releases_cache');
     loadDashboard();
 });
 
@@ -197,7 +238,7 @@ async function loadDashboard() {
             }
         }
 
-        const liveData = {};
+        const liveBooksList = [];
         archivedBooksList = [];
         for (const cls of CLASSES) {
             const docSnap = await getDoc(doc(db, "Curriculum", cls));
@@ -205,12 +246,13 @@ async function loadDashboard() {
                 const data = docSnap.data();
                 if (data.subjects) {
                     data.subjects.forEach(sub => {
-                        liveData[sub] = {
+                        liveBooksList.push({
                             class: cls,
+                            name: sub,
                             pdf: data.pdf_links?.[sub] || "",
                             img: data.image_links?.[sub] || "",
                             edition: data.book_editions?.[sub] || "2026_v1"
-                        };
+                        });
                     });
                 }
                 if (Array.isArray(data.archived_books)) {
@@ -235,7 +277,6 @@ async function loadDashboard() {
         const classCoversSnap = await getDoc(doc(db, "Admin", "ClassCovers"));
         liveClassCovers = classCoversSnap.exists() ? classCoversSnap.data() : {};
 
-        // Load Published Exam Papers from Firestore
         publishedExamPapers = [];
         try {
             const examSnap = await getDocs(collection(db, "ExamPapers"));
@@ -243,89 +284,229 @@ async function loadDashboard() {
             publishedExamPapers.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
         } catch (_) {}
 
-        const githubData = {};
-        allGithubImages = []; 
-        
-        // Use sessionStorage cache to save GitHub API bandwidth unless 'Sync Repo' is clicked
+        allGithubImages = [];
+        allReleasePdfs = [];
+        availableReleaseTags = [];
+        const coverByNorm = {};
+        const legacyMaterialsPdfs = [];
+        const standaloneRepoImages = [];
+
+        // 1. Scan 'materials/' folder (cover images + any remaining legacy files)
         let files = null;
         const cachedGh = sessionStorage.getItem('gh_materials_cache');
         if (cachedGh) {
             try { files = JSON.parse(cachedGh); } catch (_) {}
         }
         if (!files) {
-            const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/materials`);
-            files = await res.json();
-            if (Array.isArray(files)) {
-                sessionStorage.setItem('gh_materials_cache', JSON.stringify(files));
-            }
+            try {
+                const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/materials`);
+                if (res.ok) {
+                    files = await res.json();
+                    if (Array.isArray(files)) sessionStorage.setItem('gh_materials_cache', JSON.stringify(files));
+                }
+            } catch (_) {}
         }
 
         if (Array.isArray(files)) {
             files.forEach(file => {
                 const url = `https://${GITHUB_OWNER}.github.io/${GITHUB_REPO}/${file.path}`;
                 const low = file.name.toLowerCase();
-                let subjectName = "";
-
                 if (low.endsWith('.webp') || low.endsWith('.png') || low.endsWith('.jpg') || low.endsWith('.jpeg')) {
                     const fmt = low.endsWith('.webp') ? 'webp' : low.endsWith('.png') ? 'png' : 'jpeg';
                     allGithubImages.push({ name: file.name, url: url, format: fmt });
-                }
-
-                if (low.endsWith('.pdf')) {
-                    subjectName = file.name.replace(/\.pdf$/i, '');
-                    if (!githubData[subjectName]) githubData[subjectName] = {};
-                    githubData[subjectName].pdf = url;
-                } else if (low.includes('-cover') || low.endsWith('.webp') || low.endsWith('.png') || low.endsWith('.jpg') || low.endsWith('.jpeg')) {
-                    subjectName = low.includes('-cover')
+                    const norm = normalizeBookKey(file.name);
+                    if (norm && !coverByNorm[norm]) coverByNorm[norm] = url;
+                    const displayBase = low.includes('-cover')
                         ? file.name.split('-cover')[0]
                         : file.name.replace(/\.(webp|png|jpg|jpeg)$/i, '');
-                    if (!githubData[subjectName]) githubData[subjectName] = {};
-                    githubData[subjectName].img = url;
+                    standaloneRepoImages.push({ name: displayBase, norm, imgUrl: url });
+                } else if (low.endsWith('.pdf')) {
+                    legacyMaterialsPdfs.push({
+                        name: cleanReleaseDisplayName(file.name),
+                        fileName: file.name,
+                        norm: normalizeBookKey(file.name),
+                        pdfUrl: url,
+                        releaseTag: "LEGACY",
+                        sizeBytes: file.size || 0
+                    });
                 }
             });
         }
 
+        // 2. Scan ALL Published GitHub Releases -> Assets (Paginated so even 100+ PDFs in 1 Release all load!)
+        let releases = null;
+        const cachedRel = sessionStorage.getItem('gh_releases_cache');
+        if (cachedRel) {
+            try { releases = JSON.parse(cachedRel); } catch (_) {}
+        }
+        if (!releases) {
+            try {
+                const relRes = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases?per_page=100`);
+                if (relRes.ok) {
+                    const rawReleases = await relRes.json();
+                    if (Array.isArray(rawReleases)) {
+                        for (const rel of rawReleases) {
+                            if (rel.draft) continue;
+                            // If a release has >= 30 assets, paginate its assets endpoint so nothing is ever cut off
+                            if (Array.isArray(rel.assets) && rel.assets.length >= 30) {
+                                const fullAssets = [];
+                                for (let page = 1; page <= 10; page++) {
+                                    const aRes = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/${rel.id}/assets?per_page=100&page=${page}`);
+                                    if (!aRes.ok) break;
+                                    const pageItems = await aRes.json();
+                                    if (!Array.isArray(pageItems) || pageItems.length === 0) break;
+                                    fullAssets.push(...pageItems);
+                                    if (pageItems.length < 100) break;
+                                }
+                                if (fullAssets.length > 0) rel.assets = fullAssets;
+                            }
+                        }
+                        releases = rawReleases;
+                        sessionStorage.setItem('gh_releases_cache', JSON.stringify(releases));
+                    }
+                }
+            } catch (_) {}
+        }
+
+        if (Array.isArray(releases)) {
+            releases.forEach(rel => {
+                if (rel.draft) return;
+                const tag = rel.tag_name || "release";
+                if (!availableReleaseTags.includes(tag)) availableReleaseTags.push(tag);
+                (rel.assets || []).forEach(asset => {
+                    const low = (asset.name || "").toLowerCase();
+                    if (low.endsWith('.pdf')) {
+                        allReleasePdfs.push({
+                            name: cleanReleaseDisplayName(asset.name),
+                            fileName: asset.name,
+                            norm: normalizeBookKey(asset.name),
+                            pdfUrl: asset.browser_download_url,
+                            releaseTag: tag,
+                            sizeBytes: asset.size || 0
+                        });
+                    } else if (low.endsWith('.webp') || low.endsWith('.png') || low.endsWith('.jpg') || low.endsWith('.jpeg')) {
+                        const fmt = low.endsWith('.webp') ? 'webp' : low.endsWith('.png') ? 'png' : 'jpeg';
+                        allGithubImages.push({ name: `[${tag}] ${asset.name}`, url: asset.browser_download_url, format: fmt });
+                        const norm = normalizeBookKey(asset.name);
+                        if (norm && !coverByNorm[norm]) coverByNorm[norm] = asset.browser_download_url;
+                    }
+                });
+            });
+        }
+
+        // Populate Release Tag Filter dropdown
+        const relFilterEl = document.getElementById('releaseFilter');
+        if (relFilterEl) {
+            const prevRel = relFilterEl.value || "ALL";
+            relFilterEl.innerHTML = `<option value="ALL">All Releases / Sources</option>`;
+            availableReleaseTags.forEach(tag => {
+                relFilterEl.innerHTML += `<option value="${tag}">📦 Release: ${tag}</option>`;
+            });
+            relFilterEl.innerHTML += `<option value="LEGACY">⚠️ Old /materials/ Links</option>`;
+            if ([...relFilterEl.options].some(o => o.value === prevRel)) relFilterEl.value = prevRel;
+        }
+
+        const releaseByUrl = {};
+        allReleasePdfs.forEach(r => { releaseByUrl[r.pdfUrl] = r; });
+
+        archivedBooksList.forEach(a => {
+            const matchedRel = releaseByUrl[a.pdfUrl];
+            a.releaseTag = matchedRel ? matchedRel.releaseTag : (a.pdfUrl.includes('/materials/') ? 'LEGACY' : '');
+            a.sizeBytes = matchedRel ? matchedRel.sizeBytes : 0;
+        });
+
         globalMergedData = {};
-        
-        Object.keys(liveData).forEach(liveSubject => {
-            globalMergedData[liveSubject] = {
-                name: liveSubject,
-                pdfUrl: liveData[liveSubject].pdf,
-                imgUrl: liveData[liveSubject].img || "",
-                edition: liveData[liveSubject].edition || "2026_v1",
+        const livePdfUrls = new Set();
+        const archivedPdfUrls = new Set(archivedBooksList.map(a => a.pdfUrl).filter(Boolean));
+
+        // Add ALL Live books (keyed uniquely by class + subject so Class 1–10 never overwrite each other!)
+        liveBooksList.forEach(b => {
+            const pdf = b.pdf || "";
+            if (pdf) livePdfUrls.add(pdf);
+            const matchedRel = releaseByUrl[pdf];
+            const key = `LIVE__${b.class}__${b.name}`;
+            globalMergedData[key] = {
+                itemKey: key,
+                name: b.name,
+                pdfUrl: pdf,
+                imgUrl: b.img || "",
+                edition: b.edition || "2026_v1",
+                releaseTag: matchedRel ? matchedRel.releaseTag : (pdf.includes('/materials/') ? 'LEGACY' : ''),
+                sizeBytes: matchedRel ? matchedRel.sizeBytes : 0,
+                isLegacyUrl: pdf.includes('/materials/') && !matchedRel,
                 isLive: true,
-                currentClass: liveData[liveSubject].class
+                currentClass: b.class
             };
         });
 
-        Object.keys(githubData).forEach(gitSubject => {
-            const gPdf = githubData[gitSubject].pdf || "";
-            const gImg = githubData[gitSubject].img || "";
-            const isAlreadyLive = Object.entries(liveData).some(([liveName, item]) => {
-                if (gPdf && item.pdf && item.pdf === gPdf) return true;
-                if (!gPdf && gImg && item.img && item.img === gImg && !item.pdf) return true;
-                return liveName === gitSubject;
-            });
-            if (!isAlreadyLive && (gPdf || gImg)) {
-                globalMergedData[gitSubject] = {
-                    name: gitSubject,
-                    pdfUrl: gPdf,
-                    imgUrl: gImg,
+        // Add all scanned GitHub Release Asset PDFs not yet live or archived
+        const releaseNormSet = new Set(allReleasePdfs.map(r => r.norm));
+        allReleasePdfs.forEach((asset, idx) => {
+            if (livePdfUrls.has(asset.pdfUrl) || archivedPdfUrls.has(asset.pdfUrl)) return;
+            const key = `ASSET__${asset.releaseTag}__${idx}`;
+            globalMergedData[key] = {
+                itemKey: key,
+                name: asset.name,
+                pdfUrl: asset.pdfUrl,
+                imgUrl: coverByNorm[asset.norm] || "",
+                edition: asset.releaseTag || "2026_v1",
+                releaseTag: asset.releaseTag,
+                sizeBytes: asset.sizeBytes,
+                isLegacyUrl: false,
+                isLive: false,
+                currentClass: ""
+            };
+        });
+
+        // Include any leftover legacy PDFs still inside materials/ (if not already in Releases)
+        legacyMaterialsPdfs.forEach((leg, idx) => {
+            if (livePdfUrls.has(leg.pdfUrl) || archivedPdfUrls.has(leg.pdfUrl) || releaseNormSet.has(leg.norm)) return;
+            const key = `LEGACY__${idx}`;
+            globalMergedData[key] = {
+                itemKey: key,
+                name: leg.name,
+                pdfUrl: leg.pdfUrl,
+                imgUrl: coverByNorm[leg.norm] || "",
+                edition: "2026_v1",
+                releaseTag: "LEGACY",
+                sizeBytes: leg.sizeBytes,
+                isLegacyUrl: true,
+                isLive: false,
+                currentClass: ""
+            };
+        });
+
+        // Include standalone images in materials/ (for Image-Only cards)
+        standaloneRepoImages.forEach((imgItem, idx) => {
+            if (releaseNormSet.has(imgItem.norm)) return;
+            const alreadyUsed = Object.values(globalMergedData).some(
+                m => m.imgUrl === imgItem.imgUrl || normalizeBookKey(m.name) === imgItem.norm
+            );
+            if (!alreadyUsed) {
+                const key = `IMG__${idx}`;
+                globalMergedData[key] = {
+                    itemKey: key,
+                    name: imgItem.name,
+                    pdfUrl: "",
+                    imgUrl: imgItem.imgUrl,
                     edition: "2026_v1",
+                    releaseTag: "",
+                    sizeBytes: 0,
+                    isLegacyUrl: false,
                     isLive: false,
                     currentClass: ""
                 };
             }
         });
 
-        systemStatus.innerHTML = "<i class='bx bx-check-circle'></i> Systems synced. Ready for deployment.";
+        systemStatus.innerHTML = `<i class='bx bx-check-circle'></i> Synced ${allReleasePdfs.length} Release Asset PDF(s) across ${availableReleaseTags.length} Release(s) + ${allGithubImages.length} Cover Image(s).`;
         systemStatus.style.color = "var(--success)";
-        
+
         updateQuietHoursIndicator();
         renderAdminNoticesList();
         populateExamRepoImagePicker();
         renderAdminExamPapersList();
-        renderMaterialGrid(); 
+        renderMaterialGrid();
         renderClassCoversGrid();
         renderInteractiveSimulator();
 
@@ -933,6 +1114,7 @@ function renderMaterialGrid() {
     const searchQuery = document.getElementById('searchInput').value.toLowerCase();
     const classFilter = document.getElementById('classFilter').value;
     const statusFilter = document.getElementById('statusFilter')?.value || "ALL";
+    const releaseFilter = document.getElementById('releaseFilter')?.value || "ALL";
 
     let liveCount = 0;
     let offlineCount = 0;
@@ -946,20 +1128,25 @@ function renderMaterialGrid() {
     });
 
     const allDisplayItems = [
-        ...mergedItems.map(i => ({ ...i, isOld: false, itemKey: i.name })),
+        ...mergedItems.map(i => ({ ...i, isOld: false, itemKey: i.itemKey || i.name })),
         ...archivedBooksList.map(a => ({ ...a, itemKey: a.archiveKey }))
     ];
 
     allDisplayItems.forEach(item => {
-        const matchesSearch = item.name.toLowerCase().includes(searchQuery);
+        const matchesSearch = item.name.toLowerCase().includes(searchQuery) ||
+            (item.releaseTag || "").toLowerCase().includes(searchQuery);
         const matchesClass = classFilter === "ALL" || item.currentClass === classFilter;
         const matchesStatus =
             statusFilter === "ALL" ||
             (statusFilter === "LIVE" && item.isLive && !item.isOld) ||
             (statusFilter === "OFFLINE" && !item.isLive && !item.isOld) ||
             (statusFilter === "OLD" && item.isOld);
+        const matchesRelease =
+            releaseFilter === "ALL" ||
+            (releaseFilter === "LEGACY" && (item.releaseTag === "LEGACY" || item.isLegacyUrl)) ||
+            (item.releaseTag === releaseFilter);
 
-        if (matchesSearch && matchesClass && matchesStatus) {
+        if (matchesSearch && matchesClass && matchesStatus && matchesRelease) {
             createMaterialCardHTML(item, contentGrid);
         }
     });
@@ -1022,20 +1209,25 @@ function createMaterialCardHTML(item, container) {
         ? item.imgUrl
         : "https://via.placeholder.com/400x600?text=PDF+Default+Cover";
     const safeImg = escapeJs(displayThumb);
+    const sizeText = formatBytes(item.sizeBytes);
 
     const readPdfBtn = item.pdfUrl
-        ? `<button class="btn-preview" onclick="openPdfReaderModal('${safeName}', '${safePdf}')" title="Read / Confirm PDF" style="color:#4318FF;"><i class='bx bxs-file-pdf'></i></button>`
+        ? `<button class="btn-preview" onclick="openPdfReaderModal('${safeName}', '${safePdf}', ${Number(item.sizeBytes || 0)})" title="Read / Verify PDF" style="color:#4318FF;"><i class='bx bxs-file-pdf'></i></button>`
         : '';
 
-    // SPECIAL CARD FOR OLD / ARCHIVED BOOKS
     if (item.isOld) {
+        const archTag = item.releaseTag === 'LEGACY'
+            ? `⚠️ Old /materials/ Link`
+            : item.releaseTag
+                ? `📦 Asset (${item.releaseTag}${sizeText ? ' • ' + sizeText : ''})`
+                : `📦 Archived Book`;
         card.innerHTML = `
             <div class="card-image-container">
                 <img src="${displayThumb}" alt="${item.name}">
                 <div class="status-badge" style="background:#FF8F00; color:white;"><i class='bx bx-archive'></i> OLD • ${item.edition}</div>
             </div>
             <div class="card-content">
-                <div style="font-size:11px; font-weight:700; color:#FF8F00; margin-bottom:4px;">📦 Archived Book (${item.currentClass})</div>
+                <div style="font-size:11px; font-weight:700; color:#FF8F00; margin-bottom:4px;">${archTag} (${item.currentClass})</div>
                 <div class="card-title-wrapper">
                     <div class="card-title">${item.name}</div>
                 </div>
@@ -1058,7 +1250,7 @@ function createMaterialCardHTML(item, container) {
 
     let imageOptionsHtml = `<option value="" ${!hasValidImg ? 'selected' : ''}>🚫 No Cover Image (Default Foxy)</option>`;
     imageOptionsHtml += `<option value="CUSTOM">🔗 -- Paste Custom URL --</option>`;
-    
+
     let imgFound = false;
     getFilteredGithubImages().forEach(img => {
         const isSelected = (item.imgUrl === img.url) ? 'selected' : '';
@@ -1070,31 +1262,33 @@ function createMaterialCardHTML(item, container) {
         imageOptionsHtml += `<option value="${item.imgUrl}" selected>🔗 Attached Cover Image</option>`;
     }
 
-    const typeTag = (item.pdfUrl && hasValidImg)
-        ? `📘 PDF + Cover`
-        : item.pdfUrl
-            ? `📄 PDF Only`
-            : `🖼️ Image Only`;
+    const sourceTag = item.isLegacyUrl
+        ? `<span style="color:#EE5D50;">⚠️ Legacy /materials/ PDF (Click Migrate)</span>`
+        : item.releaseTag && item.releaseTag !== "LEGACY"
+            ? `📦 Release: ${item.releaseTag}${sizeText ? ` • ${sizeText}` : ''}`
+            : item.pdfUrl
+                ? `📄 External PDF`
+                : `🖼️ Image Only`;
 
-    const badge = item.isLive 
-        ? `<div class="status-badge status-live"><i class='bx bx-broadcast'></i> LIVE • ${item.edition || '2026_v1'}</div>` 
+    const badge = item.isLive
+        ? `<div class="status-badge status-live"><i class='bx bx-broadcast'></i> LIVE • ${item.edition || '2026_v1'}</div>`
         : `<div class="status-badge status-offline"><i class='bx bx-archive-in'></i> OFFLINE</div>`;
 
     const actionsHtml = item.isLive
         ? `<button class="btn-offline" onclick="takeMaterialOffline('${safeName}', '${safeClass}')"><i class='bx bx-cloud-download'></i> Offline</button>`
-        : `<button class="btn-publish" onclick="publishMaterialLive('${safeName}', '${safePdf}')"><i class='bx bx-cloud-upload'></i> Publish</button>`;
+        : `<button class="btn-publish" onclick="publishMaterialLive('${safeKey}')"><i class='bx bx-cloud-upload'></i> Publish</button>`;
 
     const previewBtn = `<button class="btn-preview" onclick="previewMaterial('${safeName}', '${safeImg}')" title="Preview Cover"><i class='bx bx-mobile-alt'></i></button>`;
     const moveOldBtn = (item.isLive && item.pdfUrl)
-        ? `<button class="btn-preview" onclick="moveLiveBookToOld('${safeName}', '${safeClass}')" title="Move to Old Books / Upgrade Edition" style="color:#FF8F00;"><i class='bx bx-archive'></i></button>`
+        ? `<button class="btn-preview" onclick="moveLiveBookToOld('${safeName}', '${safeClass}')" title="Upgrade to New Book / Move to Old Books" style="color:#FF8F00;"><i class='bx bx-archive'></i></button>`
         : '';
-    const renameBtn = item.isLive 
-        ? `<button class="btn-rename" onclick="openRenameModal('${safeName}', '${safeClass}')" title="Rename Subject"><i class='bx bx-edit-alt'></i></button>` 
+    const renameBtn = item.isLive
+        ? `<button class="btn-rename" onclick="openRenameModal('${safeName}', '${safeClass}')" title="Rename Subject"><i class='bx bx-edit-alt'></i></button>`
         : '';
 
-    const onImageChange = item.isLive 
-        ? `onchange="updateLiveSubjectImage('${safeName}', '${safeClass}', this.value)"` 
-        : `onchange="updateCardImagePreview('${safeName}', this.value)"`;
+    const onImageChange = item.isLive
+        ? `onchange="updateLiveSubjectImage('${safeName}', '${safeClass}', this.value)"`
+        : `onchange="updateCardImagePreview('${safeKey}', this.value)"`;
 
     const isChecked = selectedMaterialKeys.has(item.itemKey) ? 'checked' : '';
 
@@ -1107,15 +1301,15 @@ function createMaterialCardHTML(item, container) {
             ${badge}
         </div>
         <div class="card-content">
-            <div style="font-size:11px; font-weight:700; color:#4318FF; margin-bottom:4px;">${typeTag}</div>
+            <div style="font-size:11px; font-weight:700; color:#4318FF; margin-bottom:4px;">${sourceTag}</div>
             <div class="card-title-wrapper">
                 <div class="card-title">${item.name}</div>
                 ${renameBtn}
             </div>
-            <select id="select-${item.name}" class="card-select" ${item.isLive ? 'disabled' : ''}>
+            <select id="select-${item.itemKey}" class="card-select" ${item.isLive ? 'disabled' : ''}>
                 ${optionsHtml}
             </select>
-            <select id="imgSelect-${item.name}" class="card-select" ${onImageChange}>
+            <select id="imgSelect-${item.itemKey}" class="card-select" ${onImageChange}>
                 ${imageOptionsHtml}
             </select>
             <div class="card-actions-row">
@@ -1272,27 +1466,30 @@ window.confirmRename = async () => {
     }
 
     try {
-        const material = globalMergedData[oldName];
+        const material = findLiveItem(oldName, className);
+        if (!material) return closeRenameModal();
         const docRef = doc(db, "Curriculum", className);
 
-        await updateDoc(docRef, {
+        await setDoc(docRef, {
             subjects: arrayUnion(newName),
-            [`pdf_links.${newName}`]: material.pdfUrl || "",
-            [`image_links.${newName}`]: material.imgUrl || "",
-            [`book_editions.${newName}`]: material.edition || "2026_v1"
-        });
+            pdf_links: { [newName]: material.pdfUrl || "" },
+            image_links: { [newName]: material.imgUrl || "" },
+            book_editions: { [newName]: material.edition || "2026_v1" }
+        }, { merge: true });
 
-        await updateDoc(docRef, {
-            subjects: arrayRemove(oldName),
-            [`pdf_links.${oldName}`]: deleteField(),
-            [`image_links.${oldName}`]: deleteField(),
-            [`book_editions.${oldName}`]: deleteField()
-        });
+        await updateDoc(
+            docRef,
+            new FieldPath("subjects"), arrayRemove(oldName),
+            new FieldPath("pdf_links", oldName), deleteField(),
+            new FieldPath("image_links", oldName), deleteField(),
+            new FieldPath("book_editions", oldName), deleteField()
+        );
 
         showToast(`Renamed to "${newName}"! App will update instantly.`, "success");
         closeRenameModal();
-        loadDashboard(); 
+        loadDashboard();
     } catch (e) {
+        console.error(e);
         showToast("Failed to rename subject.", "error");
     }
 };
@@ -1307,31 +1504,30 @@ window.closePreviewModal = () => {
     document.getElementById('previewModal').classList.add('hidden');
 };
 
-window.updateCardImagePreview = (subjectName, imgUrl) => {
+window.updateCardImagePreview = (itemKey, imgUrl) => {
+    const item = globalMergedData[itemKey];
+    const displayName = item ? item.name : itemKey;
+    const select = document.getElementById(`imgSelect-${itemKey}`);
+    if (!select) return;
+
     if (imgUrl === "CUSTOM") {
-        imgUrl = prompt(`Paste the custom image URL for ${subjectName}:`);
+        imgUrl = prompt(`Paste the custom image URL for ${displayName}:`);
         if (!imgUrl || (!imgUrl.startsWith("http") && !imgUrl.startsWith("https"))) {
             showToast("Invalid URL provided. Must start with http/https.", "error");
-            document.getElementById(`imgSelect-${subjectName}`).value = ""; 
+            select.value = "";
             return;
         }
-        
-        const select = document.getElementById(`imgSelect-${subjectName}`);
         const opt = document.createElement('option');
-        opt.value = imgUrl;
+        opt.value = imgUrl.trim();
         opt.text = "🔗 Custom Link Attached";
         opt.selected = true;
         select.appendChild(opt);
     }
-    
-    const card = document.getElementById(`imgSelect-${subjectName}`).closest('.subject-card');
-    const img = card.querySelector('.card-image-container img');
-    if(img) img.src = imgUrl;
-    
-    const previewBtn = card.querySelector('.btn-preview');
-    if(previewBtn) {
-        previewBtn.setAttribute('onclick', `previewMaterial('${subjectName}', '${imgUrl}')`);
-    }
+
+    const thumbUrl = imgUrl || "https://via.placeholder.com/400x600?text=PDF+Default+Cover";
+    const card = select.closest('.subject-card');
+    const img = card?.querySelector('.card-image-container img');
+    if (img) img.src = thumbUrl;
 };
 
 window.updateLiveSubjectImage = async (subjectName, className, imgUrl) => {
@@ -1345,12 +1541,11 @@ window.updateLiveSubjectImage = async (subjectName, className, imgUrl) => {
     }
 
     try {
-        const docRef = doc(db, "Curriculum", className);
-        await updateDoc(docRef, {
-            [`image_links.${subjectName}`]: imgUrl
-        });
+        await setDoc(doc(db, "Curriculum", className), {
+            image_links: { [subjectName]: imgUrl }
+        }, { merge: true });
         showToast(`Cover updated for "${subjectName}"!`, "success");
-        loadDashboard(); 
+        loadDashboard();
     } catch (e) {
         showToast("Failed to update cover.", "error");
     }
@@ -1359,11 +1554,15 @@ window.updateLiveSubjectImage = async (subjectName, className, imgUrl) => {
 // ==========================================
 // 10. ACTIONS: PUBLISH / OFFLINE
 // ==========================================
-window.publishMaterialLive = async (subjectName, pdfUrl) => {
-    const classSelect = document.getElementById(`select-${subjectName}`);
-    const imgSelect = document.getElementById(`imgSelect-${subjectName}`);
-    const selectedClass = classSelect.value;
-    const imgUrl = imgSelect ? imgSelect.value : "";
+window.publishMaterialLive = async (itemKey) => {
+    const item = globalMergedData[itemKey];
+    if (!item) return showToast("Item not found. Click Sync Releases & Repo.", "error");
+
+    const subjectName = item.name;
+    const classSelect = document.getElementById(`select-${itemKey}`);
+    const imgSelect = document.getElementById(`imgSelect-${itemKey}`);
+    const selectedClass = classSelect ? classSelect.value : "";
+    const imgUrl = imgSelect ? imgSelect.value : (item.imgUrl || "");
 
     if (!selectedClass) {
         showToast("Select a class before publishing!", "error");
@@ -1373,34 +1572,27 @@ window.publishMaterialLive = async (subjectName, pdfUrl) => {
         showToast("Please provide a valid Custom URL first.", "error");
         return;
     }
-    const finalPdf = pdfUrl || "";
+    const finalPdf = item.pdfUrl || "";
     const finalImg = imgUrl || "";
+    const editionTag = (item.releaseTag && item.releaseTag !== "LEGACY") ? item.releaseTag : (item.edition || "2026_v1");
+
     if (!finalPdf && !finalImg) {
         showToast("Attach at least a PDF or a Cover Image!", "error");
         return;
     }
 
     try {
-        const docRef = doc(db, "Curriculum", selectedClass);
-        await updateDoc(docRef, {
+        await setDoc(doc(db, "Curriculum", selectedClass), {
             subjects: arrayUnion(subjectName),
-            [`pdf_links.${subjectName}`]: finalPdf,
-            [`image_links.${subjectName}`]: finalImg,
-            [`book_editions.${subjectName}`]: "2026_v1"
-        }).catch(async (e) => {
-            if (e.code === 'not-found') {
-                await setDoc(docRef, {
-                    subjects: [subjectName],
-                    pdf_links: { [subjectName]: finalPdf },
-                    image_links: { [subjectName]: finalImg },
-                    book_editions: { [subjectName]: "2026_v1" }
-                });
-            } else throw e;
-        });
-        
-        showToast(`"${subjectName}" is now live!`, "success");
-        loadDashboard(); 
+            pdf_links: { [subjectName]: finalPdf },
+            image_links: { [subjectName]: finalImg },
+            book_editions: { [subjectName]: editionTag }
+        }, { merge: true });
+
+        showToast(`"${subjectName}" is now live in ${selectedClass}!`, "success");
+        loadDashboard();
     } catch (e) {
+        console.error(e);
         showToast("Publish failed. Check permissions.", "error");
     }
 };
@@ -1408,14 +1600,15 @@ window.publishMaterialLive = async (subjectName, pdfUrl) => {
 window.takeMaterialOffline = async (subjectName, currentClass) => {
     if (confirm(`Remove "${subjectName}" from the app?`)) {
         try {
-            await updateDoc(doc(db, "Curriculum", currentClass), {
-                subjects: arrayRemove(subjectName),
-                [`pdf_links.${subjectName}`]: deleteField(),
-                [`image_links.${subjectName}`]: deleteField(),
-                [`book_editions.${subjectName}`]: deleteField()
-            });
+            await updateDoc(
+                doc(db, "Curriculum", currentClass),
+                new FieldPath("subjects"), arrayRemove(subjectName),
+                new FieldPath("pdf_links", subjectName), deleteField(),
+                new FieldPath("image_links", subjectName), deleteField(),
+                new FieldPath("book_editions", subjectName), deleteField()
+            );
             showToast(`"${subjectName}" taken offline.`, "error");
-            loadDashboard(); 
+            loadDashboard();
         } catch (e) {
             showToast("Failed to take offline.", "error");
         }
@@ -2046,13 +2239,16 @@ window.upgradeSubjectEdition = async (subjectName, className) => {
 };
 
 // ==========================================
-// 16. BUILT-IN PDF READER + BULK SUBJECT ACTIONS + OLD BOOKS MANAGER
+// 16. BUILT-IN PDF READER + VISUAL UPGRADE/OLD BOOKS + AUTO-MIGRATE + BULK ACTIONS
 // ==========================================
-window.openPdfReaderModal = (title, pdfUrl) => {
+window.openPdfReaderModal = (title, pdfUrl, sizeBytes = 0) => {
     if (!pdfUrl) return showToast("No PDF attached to this item.", "error");
     document.getElementById('pdfReaderTitle').innerText = `📄 ${title}`;
     document.getElementById('pdfReaderNewTabLink').href = pdfUrl;
-    // Google Docs Viewer embeds GitHub Pages PDFs reliably in all browsers
+    const largeNotice = document.getElementById('pdfReaderLargeNotice');
+    if (largeNotice) {
+        largeNotice.classList.toggle('hidden', Number(sizeBytes || 0) < 20 * 1024 * 1024);
+    }
     document.getElementById('pdfReaderFrame').src = `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(pdfUrl)}`;
     document.getElementById('pdfReaderModal').classList.remove('hidden');
 };
@@ -2062,43 +2258,191 @@ window.closePdfReaderModal = () => {
     document.getElementById('pdfReaderModal').classList.add('hidden');
 };
 
-window.moveLiveBookToOld = async (subjectName, className) => {
-    const item = globalMergedData[subjectName];
+window.moveLiveBookToOld = (subjectName, className) => {
+    const item = findLiveItem(subjectName, className);
     if (!item) return;
-    const choice = prompt(
-        `Move "${subjectName}" (${className}) to Old/Archived Books:\n\n` +
-        `• Paste a NEW PDF URL to replace it & archive this old one, OR\n` +
-        `• Leave BLANK and click OK to just move this book into Old Books (remove from Live):`,
-        ""
-    );
-    if (choice === null) return;
+
+    document.getElementById('upgradeSubjectName').value = subjectName;
+    document.getElementById('upgradeClassName').value = className;
+    document.getElementById('upgradeBookSubtitle').innerText =
+        `Book: "${subjectName}" (${className}) • Current Edition: ${item.edition || '2026_v1'}`;
+    document.getElementById('upgradeActionMode').value = "UPGRADE";
+
+    const sel = document.getElementById('upgradePdfSelect');
+    sel.innerHTML = `<option value="">-- Select New PDF from GitHub Releases Assets --</option>`;
+    allReleasePdfs.forEach(asset => {
+        if (asset.pdfUrl === item.pdfUrl) return;
+        const sizeLabel = formatBytes(asset.sizeBytes);
+        const opt = document.createElement('option');
+        opt.value = asset.pdfUrl;
+        opt.dataset.tag = asset.releaseTag || "2027_v1";
+        opt.textContent = `[${asset.releaseTag}] ${asset.fileName}${sizeLabel ? ' (' + sizeLabel + ')' : ''}`;
+        sel.appendChild(opt);
+    });
+    const customOpt = document.createElement('option');
+    customOpt.value = "CUSTOM";
+    customOpt.textContent = "🔗 -- Paste Custom PDF URL --";
+    sel.appendChild(customOpt);
+
+    document.getElementById('upgradeCustomPdfInput').value = "";
+    document.getElementById('upgradeCustomPdfInput').classList.add('hidden');
+    document.getElementById('upgradeEditionInput').value = "2027_v1";
+    toggleUpgradeModeFields();
+    document.getElementById('upgradeBookModal').classList.remove('hidden');
+};
+
+window.closeUpgradeBookModal = () => {
+    document.getElementById('upgradeBookModal').classList.add('hidden');
+};
+
+window.toggleUpgradeModeFields = () => {
+    const mode = document.getElementById('upgradeActionMode').value;
+    document.getElementById('upgradeNewBookFields').classList.toggle('hidden', mode !== "UPGRADE");
+};
+
+window.onUpgradePdfAssetSelected = () => {
+    const sel = document.getElementById('upgradePdfSelect');
+    const customBox = document.getElementById('upgradeCustomPdfInput');
+    if (sel.value === "CUSTOM") {
+        customBox.classList.remove('hidden');
+        return;
+    }
+    customBox.classList.add('hidden');
+    const chosenOpt = sel.options[sel.selectedIndex];
+    if (chosenOpt && chosenOpt.dataset.tag) {
+        document.getElementById('upgradeEditionInput').value = chosenOpt.dataset.tag;
+    }
+};
+
+window.confirmUpgradeOrArchiveBook = async () => {
+    const subjectName = document.getElementById('upgradeSubjectName').value;
+    const className = document.getElementById('upgradeClassName').value;
+    const mode = document.getElementById('upgradeActionMode').value;
+    const item = findLiveItem(subjectName, className);
+    if (!item) return closeUpgradeBookModal();
 
     const oldEd = item.edition || "2026_v1";
     const docRef = doc(db, "Curriculum", className);
+
     try {
-        if (choice.trim()) {
-            const newEd = prompt("New Edition Tag (e.g., 2027_v1):", "2027_v1") || "2027_v1";
-            await updateDoc(docRef, {
-                archived_books: arrayUnion({ name: subjectName, edition: oldEd, pdf_url: item.pdfUrl, cover_url: item.imgUrl || "" }),
-                [`pdf_links.${subjectName}`]: choice.trim(),
-                [`book_editions.${subjectName}`]: newEd.trim()
-            });
-            showToast(`"${subjectName}" upgraded & old edition moved to Old Books!`, "success");
+        if (mode === "UPGRADE") {
+            const selVal = document.getElementById('upgradePdfSelect').value;
+            const newPdfUrl = selVal === "CUSTOM"
+                ? document.getElementById('upgradeCustomPdfInput').value.trim()
+                : selVal;
+            const newEd = document.getElementById('upgradeEditionInput').value.trim() || "2027_v1";
+
+            if (!newPdfUrl) {
+                showToast("Select a New PDF from Releases Assets first!", "error");
+                return;
+            }
+            await setDoc(docRef, {
+                archived_books: arrayUnion({
+                    name: subjectName,
+                    edition: oldEd,
+                    pdf_url: item.pdfUrl,
+                    cover_url: item.imgUrl || ""
+                }),
+                pdf_links: { [subjectName]: newPdfUrl },
+                book_editions: { [subjectName]: newEd }
+            }, { merge: true });
+            showToast(`✨ "${subjectName}" upgraded to ${newEd} & old edition moved to Old Books!`, "success");
         } else {
-            await updateDoc(docRef, {
-                archived_books: arrayUnion({ name: subjectName, edition: oldEd, pdf_url: item.pdfUrl, cover_url: item.imgUrl || "" }),
-                subjects: arrayRemove(subjectName),
-                [`pdf_links.${subjectName}`]: deleteField(),
-                [`image_links.${subjectName}`]: deleteField(),
-                [`book_editions.${subjectName}`]: deleteField()
-            });
-            showToast(`"${subjectName}" moved to Old Books!`, "success");
+            await updateDoc(
+                docRef,
+                new FieldPath("archived_books"), arrayUnion({
+                    name: subjectName,
+                    edition: oldEd,
+                    pdf_url: item.pdfUrl,
+                    cover_url: item.imgUrl || ""
+                }),
+                new FieldPath("subjects"), arrayRemove(subjectName),
+                new FieldPath("pdf_links", subjectName), deleteField(),
+                new FieldPath("image_links", subjectName), deleteField(),
+                new FieldPath("book_editions", subjectName), deleteField()
+            );
+            showToast(`📦 "${subjectName}" moved to Old Books!`, "success");
         }
+        closeUpgradeBookModal();
         loadDashboard();
     } catch (e) {
         console.error(e);
-        showToast("Failed to archive book.", "error");
+        showToast("Failed to update book edition.", "error");
     }
+};
+
+window.migrateOldLinksToReleases = async () => {
+    if (allReleasePdfs.length === 0) {
+        showToast("No PDFs found in GitHub Releases Assets! Click 'Sync Releases & Repo' first.", "error");
+        return;
+    }
+
+    const releaseByNorm = {};
+    allReleasePdfs.forEach(r => {
+        if (!releaseByNorm[r.norm]) releaseByNorm[r.norm] = r;
+    });
+
+    const plannedUpdates = [];
+    const unmatchedBooks = [];
+
+    for (const cls of CLASSES) {
+        const docSnap = await getDoc(doc(db, "Curriculum", cls));
+        if (!docSnap.exists()) continue;
+        const data = docSnap.data();
+        const pdfLinks = data.pdf_links || {};
+        const archived = Array.isArray(data.archived_books) ? data.archived_books : [];
+        const newPdfLinksPatch = {};
+        let liveChanged = false;
+
+        Object.entries(pdfLinks).forEach(([subName, url]) => {
+            if (!url || !url.includes('/materials/')) return;
+            const matched = releaseByNorm[normalizeBookKey(url)] || releaseByNorm[normalizeBookKey(subName)];
+            if (matched) {
+                newPdfLinksPatch[subName] = matched.pdfUrl;
+                liveChanged = true;
+                plannedUpdates.push(`[LIVE] ${cls} → ${subName} ==> ${matched.releaseTag}/${matched.fileName}`);
+            } else {
+                unmatchedBooks.push(`${cls} → ${subName}`);
+            }
+        });
+
+        let archivedChanged = false;
+        const nextArchived = archived.map(entry => {
+            const url = entry?.pdf_url || "";
+            if (!url.includes('/materials/')) return entry;
+            const matched = releaseByNorm[normalizeBookKey(url)] || releaseByNorm[normalizeBookKey(entry.name)];
+            if (matched) {
+                archivedChanged = true;
+                plannedUpdates.push(`[OLD]  ${cls} → ${entry.name} ==> ${matched.releaseTag}/${matched.fileName}`);
+                return { ...entry, pdf_url: matched.pdfUrl };
+            }
+            return entry;
+        });
+
+        if (liveChanged || archivedChanged) {
+            const mergeObj = {};
+            if (liveChanged) mergeObj.pdf_links = newPdfLinksPatch;
+            if (archivedChanged) mergeObj.archived_books = nextArchived;
+            await setDoc(doc(db, "Curriculum", cls), mergeObj, { merge: true });
+        }
+    }
+
+    if (plannedUpdates.length === 0) {
+        const msg = unmatchedBooks.length > 0
+            ? `No auto-matches found. ${unmatchedBooks.length} legacy book(s) had different filenames than your Release Assets.`
+            : "✅ All Live & Old books already point to GitHub Releases Assets!";
+        showToast(msg, unmatchedBooks.length > 0 ? "error" : "success");
+        return;
+    }
+
+    alert(
+        `✅ Auto-Migrated ${plannedUpdates.length} Book(s) to GitHub Releases Assets!\n\n` +
+        plannedUpdates.slice(0, 15).join("\n") +
+        (plannedUpdates.length > 15 ? `\n...and ${plannedUpdates.length - 15} more.` : "") +
+        (unmatchedBooks.length > 0 ? `\n\n⚠️ Unmatched (${unmatchedBooks.length}): ${unmatchedBooks.slice(0, 5).join(", ")}` : "")
+    );
+    showToast(`🚀 Migrated ${plannedUpdates.length} book(s) to Releases Assets!`, "success");
+    loadDashboard();
 };
 
 window.restoreOldBookToLive = async (archiveKey) => {
@@ -2107,13 +2451,13 @@ window.restoreOldBookToLive = async (archiveKey) => {
     if (!confirm(`Restore "${arch.name} (${arch.edition})" back to Live books in ${arch.currentClass}?`)) return;
     try {
         const docRef = doc(db, "Curriculum", arch.currentClass);
-        await updateDoc(docRef, {
+        await setDoc(docRef, {
             subjects: arrayUnion(arch.name),
-            [`pdf_links.${arch.name}`]: arch.pdfUrl,
-            [`image_links.${arch.name}`]: arch.imgUrl || "",
-            [`book_editions.${arch.name}`]: arch.edition,
-            archived_books: arrayRemove(arch.rawEntry)
-        });
+            pdf_links: { [arch.name]: arch.pdfUrl },
+            image_links: { [arch.name]: arch.imgUrl || "" },
+            book_editions: { [arch.name]: arch.edition }
+        }, { merge: true });
+        await updateDoc(docRef, { archived_books: arrayRemove(arch.rawEntry) });
         showToast(`"${arch.name}" restored to Live!`, "success");
         loadDashboard();
     } catch (e) {
@@ -2143,31 +2487,29 @@ window.bulkPublishSelected = async () => {
     if (!bulkClass) return showToast("Pick a Target Class in the Bulk Bar first!", "error");
 
     try {
-        const docRef = doc(db, "Curriculum", bulkClass);
-        const updatePayload = {};
         const namesToAdd = [];
-        keys.forEach(name => {
-            const item = globalMergedData[name];
-            const imgSel = document.getElementById(`imgSelect-${name}`);
-            const chosenImg = (imgSel && imgSel.value !== "CUSTOM") ? imgSel.value : (item.imgUrl || "");
-            namesToAdd.push(name);
-            updatePayload[`pdf_links.${name}`] = item.pdfUrl || "";
-            updatePayload[`image_links.${name}`] = chosenImg;
-            updatePayload[`book_editions.${name}`] = "2026_v1";
-        });
-        updatePayload.subjects = arrayUnion(...namesToAdd);
+        const pdfMap = {};
+        const imgMap = {};
+        const edMap = {};
 
-        await updateDoc(docRef, updatePayload).catch(async (e) => {
-            if (e.code === 'not-found') {
-                const fresh = { subjects: namesToAdd, pdf_links: {}, image_links: {}, book_editions: {} };
-                namesToAdd.forEach(n => {
-                    fresh.pdf_links[n] = updatePayload[`pdf_links.${n}`];
-                    fresh.image_links[n] = updatePayload[`image_links.${n}`];
-                    fresh.book_editions[n] = "2026_v1";
-                });
-                await setDoc(docRef, fresh);
-            } else throw e;
+        keys.forEach(key => {
+            const item = globalMergedData[key];
+            const name = item.name;
+            const imgSel = document.getElementById(`imgSelect-${key}`);
+            const chosenImg = (imgSel && imgSel.value !== "CUSTOM") ? imgSel.value : (item.imgUrl || "");
+            const edTag = (item.releaseTag && item.releaseTag !== "LEGACY") ? item.releaseTag : "2026_v1";
+            namesToAdd.push(name);
+            pdfMap[name] = item.pdfUrl || "";
+            imgMap[name] = chosenImg;
+            edMap[name] = edTag;
         });
+
+        await setDoc(doc(db, "Curriculum", bulkClass), {
+            subjects: arrayUnion(...namesToAdd),
+            pdf_links: pdfMap,
+            image_links: imgMap,
+            book_editions: edMap
+        }, { merge: true });
 
         selectedMaterialKeys.clear();
         showToast(`🚀 Bulk published ${namesToAdd.length} item(s) to ${bulkClass}!`, "success");
@@ -2187,18 +2529,21 @@ window.bulkTakeSelectedOffline = async () => {
     items.forEach(i => { (byClass[i.currentClass] ||= []).push(i.name); });
     try {
         for (const [cls, names] of Object.entries(byClass)) {
-            const payload = { subjects: arrayRemove(...names) };
+            const args = [new FieldPath("subjects"), arrayRemove(...names)];
             names.forEach(n => {
-                payload[`pdf_links.${n}`] = deleteField();
-                payload[`image_links.${n}`] = deleteField();
-                payload[`book_editions.${n}`] = deleteField();
+                args.push(
+                    new FieldPath("pdf_links", n), deleteField(),
+                    new FieldPath("image_links", n), deleteField(),
+                    new FieldPath("book_editions", n), deleteField()
+                );
             });
-            await updateDoc(doc(db, "Curriculum", cls), payload);
+            await updateDoc(doc(db, "Curriculum", cls), ...args);
         }
         selectedMaterialKeys.clear();
         showToast(`Taken ${items.length} book(s) offline.`, "error");
         loadDashboard();
     } catch (e) {
+        console.error(e);
         showToast("Bulk offline failed.", "error");
     }
 };
@@ -2219,21 +2564,24 @@ window.bulkMoveSelectedToOld = async () => {
                 pdf_url: i.pdfUrl,
                 cover_url: i.imgUrl || ""
             }));
-            const payload = {
-                subjects: arrayRemove(...names),
-                archived_books: arrayUnion(...archiveEntries)
-            };
+            const args = [
+                new FieldPath("subjects"), arrayRemove(...names),
+                new FieldPath("archived_books"), arrayUnion(...archiveEntries)
+            ];
             names.forEach(n => {
-                payload[`pdf_links.${n}`] = deleteField();
-                payload[`image_links.${n}`] = deleteField();
-                payload[`book_editions.${n}`] = deleteField();
+                args.push(
+                    new FieldPath("pdf_links", n), deleteField(),
+                    new FieldPath("image_links", n), deleteField(),
+                    new FieldPath("book_editions", n), deleteField()
+                );
             });
-            await updateDoc(doc(db, "Curriculum", cls), payload);
+            await updateDoc(doc(db, "Curriculum", cls), ...args);
         }
         selectedMaterialKeys.clear();
         showToast(`📦 Moved ${items.length} book(s) to Old Books!`, "success");
         loadDashboard();
     } catch (e) {
+        console.error(e);
         showToast("Bulk archive failed.", "error");
     }
 };
