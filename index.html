@@ -605,7 +605,7 @@
             <!-- Exact Phone 2-Column Card Replica (170x140 Android Ratio) -->
             <div style="display:flex; justify-content:center; margin: 14px 0;">
                 <div style="width: 240px; border-radius: 20px; overflow: hidden; border: 2.5px solid #4318FF; background: #ffffff; box-shadow: 0 8px 20px rgba(0,0,0,0.12);">
-                    <div id="fitPreviewBox" style="position: relative; width: 240px; height: 198px; overflow: hidden; background: #f1f5f9;">
+                    <div id="fitPreviewBox" style="position: relative; width: 240px; height: 198px; overflow: hidden; background: #f1f5f9; cursor: grab; touch-action: none;">
                         <img id="fitPreviewImg" src="" alt="Preview" style="position:absolute; top:0; left:0; user-select:none; pointer-events:none;">
                     </div>
                     <div id="fitPreviewCardTitle" style="padding: 12px; text-align: center; font-weight: 700; font-size: 15px; color: #1B2559; background: white;">
@@ -636,7 +636,7 @@
                 <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#334155;">
                     <span>Zoom</span><span id="fitZVal">1.00x</span>
                 </div>
-                <input type="range" id="fitZSlider" min="100" max="250" value="100" oninput="updateFitPreviewLive()" style="width:100%;">
+                <input type="range" id="fitZSlider" min="100" max="300" value="100" oninput="updateFitPreviewLive()" style="width:100%;">
             </div>
 
             <div class="modal-actions">
