@@ -133,7 +133,7 @@ function parseFitConfig(rawUrl) {
         if (k === "fit" && (v === "contain" || v === "cover" || v === "fill")) cfg.fit = v;
         if (k === "x" && !isNaN(Number(v))) cfg.x = Math.min(100, Math.max(0, Number(v)));
         if (k === "y" && !isNaN(Number(v))) cfg.y = Math.min(100, Math.max(0, Number(v)));
-        if (k === "z" && !isNaN(Number(v))) cfg.z = Math.min(2.5, Math.max(1.0, Number(v)));
+        if (k === "z" && !isNaN(Number(v))) cfg.z = Math.min(3.0, Math.max(1.0, Number(v)));
     });
     return cfg;
 }
@@ -151,7 +151,8 @@ function getInlineFitStyle(rawUrl) {
     const cfg = parseFitConfig(rawUrl);
     if (cfg.fit === "contain") return "object-fit:contain; background:#f1f5f9;";
     if (cfg.fit === "fill") return "object-fit:fill;";
-    return `object-fit:cover; object-position:${cfg.x}% ${cfg.y}%;`;
+    const scaleCss = cfg.z > 1.01 ? ` transform:scale(${cfg.z}); transform-origin:${cfg.x}% ${cfg.y}%;` : "";
+    return `object-fit:cover; object-position:${cfg.x}% ${cfg.y}%;${scaleCss}`;
 }
 
 // ==========================================
@@ -1452,7 +1453,54 @@ window.openImageFitModal = (targetType, itemKey, displayName, className) => {
 
     setFitMode(activeFitMode);
     document.getElementById('imageFitModal').classList.remove('hidden');
+    if (imgEl.complete && imgEl.naturalWidth > 0) {
+        requestAnimationFrame(() => updateFitPreviewLive());
+    }
+    initFitBoxDragOnce();
 };
+
+let fitDragInitialized = false;
+function initFitBoxDragOnce() {
+    if (fitDragInitialized) return;
+    const box = document.getElementById('fitPreviewBox');
+    if (!box) return;
+    fitDragInitialized = true;
+
+    let dragging = false;
+    let startClientX = 0, startClientY = 0;
+    let startValX = 50, startValY = 50;
+
+    const onDown = (cx, cy) => {
+        if (activeFitMode !== "cover") return;
+        dragging = true;
+        box.style.cursor = "grabbing";
+        startClientX = cx;
+        startClientY = cy;
+        startValX = Number(document.getElementById('fitXSlider').value);
+        startValY = Number(document.getElementById('fitYSlider').value);
+    };
+    const onMove = (cx, cy) => {
+        if (!dragging) return;
+        const dx = cx - startClientX;
+        const dy = cy - startClientY;
+        const nextX = Math.min(100, Math.max(0, Math.round(startValX - dx * 0.55)));
+        const nextY = Math.min(100, Math.max(0, Math.round(startValY - dy * 0.55)));
+        document.getElementById('fitXSlider').value = nextX;
+        document.getElementById('fitYSlider').value = nextY;
+        updateFitPreviewLive();
+    };
+    const onUp = () => {
+        dragging = false;
+        box.style.cursor = "grab";
+    };
+
+    box.addEventListener('mousedown', (e) => { e.preventDefault(); onDown(e.clientX, e.clientY); });
+    window.addEventListener('mousemove', (e) => onMove(e.clientX, e.clientY));
+    window.addEventListener('mouseup', onUp);
+    box.addEventListener('touchstart', (e) => { if (e.touches[0]) onDown(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+    window.addEventListener('touchmove', (e) => { if (dragging && e.touches[0]) onMove(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+    window.addEventListener('touchend', onUp);
+}
 
 window.closeImageFitModal = () => {
     document.getElementById('imageFitModal').classList.add('hidden');
