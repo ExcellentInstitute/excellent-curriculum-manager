@@ -120,7 +120,39 @@ function extractYoutubeId(raw) {
 let simActiveTab = "HOME";
 let simSelectedClass = null;
 let simDarkMode = false;
-window.currentCropper = null;
+
+function stripFitHash(url) {
+    return String(url || "").split("#")[0];
+}
+
+function parseFitConfig(rawUrl) {
+    const cfg = { fit: "cover", x: 50, y: 50, z: 1.0 };
+    const hash = String(rawUrl || "").split("#")[1] || "";
+    hash.split("&").forEach(pair => {
+        const [k, v] = pair.split("=");
+        if (k === "fit" && (v === "contain" || v === "cover" || v === "fill")) cfg.fit = v;
+        if (k === "x" && !isNaN(Number(v))) cfg.x = Math.min(100, Math.max(0, Number(v)));
+        if (k === "y" && !isNaN(Number(v))) cfg.y = Math.min(100, Math.max(0, Number(v)));
+        if (k === "z" && !isNaN(Number(v))) cfg.z = Math.min(2.5, Math.max(1.0, Number(v)));
+    });
+    return cfg;
+}
+
+function buildFitUrl(rawUrl, cfg) {
+    const base = stripFitHash(rawUrl);
+    if (!base) return "";
+    if (cfg.fit === "contain") return `${base}#fit=contain`;
+    if (cfg.fit === "fill") return `${base}#fit=fill`;
+    if (cfg.x === 50 && cfg.y === 50 && Number(cfg.z.toFixed(2)) === 1.0) return base;
+    return `${base}#fit=cover&x=${Math.round(cfg.x)}&y=${Math.round(cfg.y)}&z=${Number(cfg.z).toFixed(2)}`;
+}
+
+function getInlineFitStyle(rawUrl) {
+    const cfg = parseFitConfig(rawUrl);
+    if (cfg.fit === "contain") return "object-fit:contain; background:#f1f5f9;";
+    if (cfg.fit === "fill") return "object-fit:fill;";
+    return `object-fit:cover; object-position:${cfg.x}% ${cfg.y}%;`;
+}
 
 // ==========================================
 // 3. UI ELEMENTS & TAB NAVIGATION
@@ -609,7 +641,7 @@ function renderInteractiveSimulator() {
                 const card = document.createElement('div');
                 card.style.cssText = "background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,0.06); border:1.5px solid #4318FF; cursor:pointer;";
                 card.innerHTML = `
-                    <img src="${cover}" onclick="openSimClass('${clsKey}')" style="width:100%; height:78px; object-fit:cover; display:block;">
+                    <img src="${stripFitHash(cover)}" onclick="openSimClass('${clsKey}')" style="width:100%; height:78px; display:block; ${getInlineFitStyle(cover)}">
                     <div style="padding:6px; font-size:11px; font-weight:700; text-align:center; color:#1B2559; display:flex; justify-content:center; align-items:center; gap:4px;">
                         <span onclick="openSimClass('${clsKey}')">${displayLabel}</span>
                         <span onclick="event.stopPropagation(); renameSimClass('${clsKey}')" title="Rename Class">✏️</span>
@@ -645,7 +677,7 @@ function renderInteractiveSimulator() {
                     const card = document.createElement('div');
                     card.style.cssText = "background:white; border-radius:12px; overflow:hidden; border:1.5px solid #05CD99; cursor:pointer;";
                     card.innerHTML = `
-                        <img src="${sub.imgUrl}" onclick="window.open('${sub.pdfUrl}', '_blank')" style="width:100%; height:78px; object-fit:cover; display:block;">
+                        <img src="${stripFitHash(sub.imgUrl)}" onclick="window.open('${sub.pdfUrl}', '_blank')" style="width:100%; height:78px; display:block; ${getInlineFitStyle(sub.imgUrl)}">
                         <div style="padding:6px; font-size:11px; font-weight:700; text-align:center; color:#1B2559;">
                             ${sub.name} <span onclick="event.stopPropagation(); openRenameModal('${sub.name}', '${sub.currentClass}')">✏️</span>
                         </div>
@@ -1251,11 +1283,13 @@ function createMaterialCardHTML(item, container) {
     let imageOptionsHtml = `<option value="" ${!hasValidImg ? 'selected' : ''}>🚫 No Cover Image (Default Foxy)</option>`;
     imageOptionsHtml += `<option value="CUSTOM">🔗 -- Paste Custom URL --</option>`;
 
+    const cleanCurrentImg = stripFitHash(item.imgUrl);
     let imgFound = false;
     getFilteredGithubImages().forEach(img => {
-        const isSelected = (item.imgUrl === img.url) ? 'selected' : '';
+        const isSelected = (cleanCurrentImg === img.url) ? 'selected' : '';
         if (isSelected) imgFound = true;
-        imageOptionsHtml += `<option value="${img.url}" ${isSelected}>[${img.format.toUpperCase()}] ${img.name}</option>`;
+        const optVal = isSelected ? item.imgUrl : img.url;
+        imageOptionsHtml += `<option value="${optVal}" ${isSelected}>[${img.format.toUpperCase()}] ${img.name}</option>`;
     });
 
     if (hasValidImg && !imgFound) {
@@ -1278,7 +1312,7 @@ function createMaterialCardHTML(item, container) {
         ? `<button class="btn-offline" onclick="takeMaterialOffline('${safeName}', '${safeClass}')"><i class='bx bx-cloud-download'></i> Offline</button>`
         : `<button class="btn-publish" onclick="publishMaterialLive('${safeKey}')"><i class='bx bx-cloud-upload'></i> Publish</button>`;
 
-    const previewBtn = `<button class="btn-preview" onclick="previewMaterial('${safeName}', '${safeImg}')" title="Preview Cover"><i class='bx bx-mobile-alt'></i></button>`;
+    const fitBtn = `<button class="btn-preview" onclick="openImageFitModal('SUBJECT', '${safeKey}', '${safeName}', '${safeClass}')" title="Fit / Position Image in Phone Box" style="color:#05CD99;"><i class='bx bx-frame'></i></button>`;
     const moveOldBtn = (item.isLive && item.pdfUrl)
         ? `<button class="btn-preview" onclick="moveLiveBookToOld('${safeName}', '${safeClass}')" title="Upgrade to New Book / Move to Old Books" style="color:#FF8F00;"><i class='bx bx-archive'></i></button>`
         : '';
@@ -1297,7 +1331,7 @@ function createMaterialCardHTML(item, container) {
             <input type="checkbox" class="material-bulk-chk" data-key="${item.itemKey}" ${isChecked}
                 onchange="toggleMaterialSelect('${safeKey}', this.checked)"
                 style="position:absolute; top:10px; left:10px; width:20px; height:20px; z-index:5; cursor:pointer; accent-color:#4318FF;">
-            <img src="${displayThumb}" alt="${item.name}">
+            <img src="${stripFitHash(displayThumb)}" alt="${item.name}" style="${getInlineFitStyle(displayThumb)}">
             ${badge}
         </div>
         <div class="card-content">
@@ -1314,7 +1348,7 @@ function createMaterialCardHTML(item, container) {
             </select>
             <div class="card-actions-row">
                 ${readPdfBtn}
-                ${previewBtn}
+                ${fitBtn}
                 ${moveOldBtn}
                 ${actionsHtml}
             </div>
@@ -1338,11 +1372,13 @@ function renderClassCoversGrid() {
         let imageOptionsHtml = `<option value="" ${!isLive ? 'selected' : ''}>🚫 No Cover (Remove)</option>`;
         imageOptionsHtml += `<option value="CUSTOM">🔗 -- Paste Custom URL --</option>`;
 
+        const cleanCurrent = stripFitHash(currentUrl);
         let found = false;
         getFilteredGithubImages().forEach(img => {
-            const sel = (currentUrl === img.url) ? 'selected' : '';
+            const sel = (cleanCurrent === img.url) ? 'selected' : '';
             if (sel) found = true;
-            imageOptionsHtml += `<option value="${img.url}" ${sel}>[${img.format.toUpperCase()}] ${img.name}</option>`;
+            const optVal = sel ? currentUrl : img.url;
+            imageOptionsHtml += `<option value="${optVal}" ${sel}>[${img.format.toUpperCase()}] ${img.name}</option>`;
         });
         if (isLive && !found) {
             imageOptionsHtml += `<option value="${currentUrl}" selected>🔗 Current Attached Cover</option>`;
@@ -1351,13 +1387,13 @@ function renderClassCoversGrid() {
         const card = document.createElement('div');
         card.className = 'subject-card';
 
-        const badge = isLive 
-            ? `<div class="status-badge status-live"><i class='bx bx-broadcast'></i> LIVE</div>` 
+        const badge = isLive
+            ? `<div class="status-badge status-live"><i class='bx bx-broadcast'></i> LIVE</div>`
             : `<div class="status-badge status-offline"><i class='bx bx-archive-in'></i> NOT SET</div>`;
 
         card.innerHTML = `
             <div class="card-image-container">
-                <img id="classCoverImg-${cls}" src="${displayImg}" alt="${cls}">
+                <img id="classCoverImg-${cls}" src="${stripFitHash(displayImg)}" alt="${cls}" style="${getInlineFitStyle(displayImg)}">
                 ${badge}
             </div>
             <div class="card-content">
@@ -1368,7 +1404,7 @@ function renderClassCoversGrid() {
                     ${imageOptionsHtml}
                 </select>
                 <div class="card-actions-row">
-                    <button class="btn-preview" onclick="previewMaterial('${cls}', document.getElementById('classCoverImg-${cls}').src)" title="Preview"><i class='bx bx-mobile-alt'></i></button>
+                    <button class="btn-preview" onclick="openImageFitModal('CLASS', '${escapeJs(cls)}', '${escapeJs(cls)}', '${escapeJs(cls)}')" title="Fit / Position Image in Phone Box" style="color:#05CD99;"><i class='bx bx-frame'></i></button>
                     <button class="btn-publish" onclick="publishClassCover('${cls}')"><i class='bx bx-save'></i> Save</button>
                     ${isLive ? `<button class="btn-offline" onclick="removeClassCover('${cls}')" style="padding:8px 10px;" title="Remove"><i class='bx bx-trash'></i></button>` : ''}
                 </div>
@@ -1379,66 +1415,158 @@ function renderClassCoversGrid() {
 }
 
 // ==========================================
-// 8. IMAGE CROP STUDIO LOGIC
+// 8. LIVE IMAGE FIT & DISPLAY FRAME EDITOR (PIXEL-MATCHED TO ANDROID CARD!)
 // ==========================================
-window.openCropModal = () => {
-    document.getElementById('cropModal').classList.remove('hidden');
-};
+let activeFitContext = null;
+let activeFitMode = "cover";
 
-window.closeCropModal = () => {
-    document.getElementById('cropModal').classList.add('hidden');
-    if(window.currentCropper) {
-        window.currentCropper.destroy();
-        window.currentCropper = null;
+window.openImageFitModal = (targetType, itemKey, displayName, className) => {
+    let rawUrl = "";
+    if (targetType === "CLASS") {
+        const sel = document.getElementById(`coverSelect-${itemKey}`);
+        rawUrl = (sel && sel.value && sel.value !== "CUSTOM") ? sel.value : (liveClassCovers[itemKey] || "");
+    } else {
+        const sel = document.getElementById(`imgSelect-${itemKey}`);
+        const item = globalMergedData[itemKey];
+        rawUrl = (sel && sel.value && sel.value !== "CUSTOM") ? sel.value : (item?.imgUrl || "");
     }
-    document.getElementById('cropFileInput').value = "";
-    document.getElementById('cropImageTarget').style.display = "none";
-    document.getElementById('cropPlaceholderText').style.display = "block";
-    document.getElementById('btnDownloadCrop').disabled = true;
+
+    if (!rawUrl || rawUrl.includes("placeholder")) {
+        return showToast("Select a cover image first before adjusting its fit!", "error");
+    }
+
+    activeFitContext = { targetType, itemKey, displayName, className, rawUrl };
+    const cfg = parseFitConfig(rawUrl);
+    activeFitMode = cfg.fit;
+
+    document.getElementById('fitModalSubtitle').innerText =
+        `Adjust how "${displayName}" appears inside the Android phone box (no new image file created).`;
+    document.getElementById('fitPreviewCardTitle').innerText = displayName;
+    document.getElementById('fitXSlider').value = Math.round(cfg.x);
+    document.getElementById('fitYSlider').value = Math.round(cfg.y);
+    document.getElementById('fitZSlider').value = Math.round(cfg.z * 100);
+
+    const imgEl = document.getElementById('fitPreviewImg');
+    imgEl.onload = () => updateFitPreviewLive();
+    imgEl.src = stripFitHash(rawUrl);
+
+    setFitMode(activeFitMode);
+    document.getElementById('imageFitModal').classList.remove('hidden');
 };
 
-document.getElementById('cropFileInput').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    if(!file) return;
+window.closeImageFitModal = () => {
+    document.getElementById('imageFitModal').classList.add('hidden');
+    activeFitContext = null;
+};
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        const img = document.getElementById('cropImageTarget');
-        img.src = event.target.result;
-        img.style.display = "block";
-        document.getElementById('cropPlaceholderText').style.display = "none";
-        document.getElementById('btnDownloadCrop').disabled = false;
+window.setFitMode = (mode) => {
+    activeFitMode = mode;
+    const map = { contain: 'btnFitContain', cover: 'btnFitCover', fill: 'btnFitFill' };
+    Object.entries(map).forEach(([k, id]) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        const active = (k === mode);
+        btn.style.background = active ? "#4318FF" : "white";
+        btn.style.color = active ? "white" : "#1B2559";
+        btn.style.borderColor = "#4318FF";
+    });
+    document.getElementById('fitPositionControls').classList.toggle('hidden', mode !== "cover");
+    updateFitPreviewLive();
+};
 
-        if(window.currentCropper) {
-            window.currentCropper.destroy();
-        }
-        
-        window.currentCropper = new Cropper(img, {
-            aspectRatio: 2 / 3,
-            viewMode: 1,
-            autoCropArea: 1
-        });
+window.resetFitValues = () => {
+    document.getElementById('fitXSlider').value = 50;
+    document.getElementById('fitYSlider').value = 50;
+    document.getElementById('fitZSlider').value = 100;
+    setFitMode("contain");
+};
+
+window.updateFitPreviewLive = () => {
+    const img = document.getElementById('fitPreviewImg');
+    const box = document.getElementById('fitPreviewBox');
+    if (!img || !box) return;
+
+    const x = Number(document.getElementById('fitXSlider').value);
+    const y = Number(document.getElementById('fitYSlider').value);
+    const z = Number(document.getElementById('fitZSlider').value) / 100;
+
+    document.getElementById('fitXVal').innerText = `${x}%`;
+    document.getElementById('fitYVal').innerText = `${y}%`;
+    document.getElementById('fitZVal').innerText = `${z.toFixed(2)}x`;
+
+    const vw = box.clientWidth || 240;
+    const vh = box.clientHeight || 198;
+
+    if (activeFitMode === "contain") {
+        img.style.width = `${vw}px`;
+        img.style.height = `${vh}px`;
+        img.style.left = "0px";
+        img.style.top = "0px";
+        img.style.objectFit = "contain";
+    } else if (activeFitMode === "fill") {
+        img.style.width = `${vw}px`;
+        img.style.height = `${vh}px`;
+        img.style.left = "0px";
+        img.style.top = "0px";
+        img.style.objectFit = "fill";
+    } else {
+        const nw = img.naturalWidth || vw;
+        const nh = img.naturalHeight || vh;
+        const baseScale = Math.max(vw / nw, vh / nh);
+        const finalScale = baseScale * z;
+        const sw = nw * finalScale;
+        const sh = nh * finalScale;
+        const dx = (vw - sw) * (x / 100);
+        const dy = (vh - sh) * (y / 100);
+        img.style.objectFit = "fill";
+        img.style.width = `${sw}px`;
+        img.style.height = `${sh}px`;
+        img.style.left = `${dx}px`;
+        img.style.top = `${dy}px`;
+    }
+};
+
+window.saveImageFitToApp = async () => {
+    if (!activeFitContext) return;
+    const { targetType, itemKey, displayName, className, rawUrl } = activeFitContext;
+    const cfg = {
+        fit: activeFitMode,
+        x: Number(document.getElementById('fitXSlider').value),
+        y: Number(document.getElementById('fitYSlider').value),
+        z: Number(document.getElementById('fitZSlider').value) / 100
     };
-    reader.readAsDataURL(file);
-});
+    const finalFramedUrl = buildFitUrl(rawUrl, cfg);
 
-window.downloadCroppedImage = () => {
-    if(!window.currentCropper) return;
-    const mime = document.getElementById('cropExportFormat')?.value || 'image/webp';
-    const ext = mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : 'webp';
-    const canvas = window.currentCropper.getCroppedCanvas({ width: 600, height: 900 });
-    
-    canvas.toBlob((blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `cropped_cover_image.${ext}`;
-        a.click();
-        URL.revokeObjectURL(url);
-        
-        showToast(`Cropped as .${ext}! Upload this new file to GitHub.`, "success");
-        closeCropModal();
-    }, mime, 0.9);
+    try {
+        if (targetType === "CLASS") {
+            await setDoc(doc(db, "Admin", "ClassCovers"), { [itemKey]: finalFramedUrl }, { merge: true });
+            liveClassCovers[itemKey] = finalFramedUrl;
+            showToast(`✅ Display fit saved live for ${displayName}!`, "success");
+            closeImageFitModal();
+            renderClassCoversGrid();
+            renderInteractiveSimulator();
+        } else {
+            const item = globalMergedData[itemKey];
+            if (item && item.isLive) {
+                await setDoc(doc(db, "Curriculum", className), {
+                    image_links: { [displayName]: finalFramedUrl }
+                }, { merge: true });
+                showToast(`✅ Display fit saved live for "${displayName}"!`, "success");
+                closeImageFitModal();
+                loadDashboard();
+            } else if (item) {
+                item.imgUrl = finalFramedUrl;
+                const sel = document.getElementById(`imgSelect-${itemKey}`);
+                if (sel && sel.selectedIndex >= 0) sel.options[sel.selectedIndex].value = finalFramedUrl;
+                showToast(`✅ Fit applied! Click Publish to push "${displayName}" live.`, "success");
+                closeImageFitModal();
+                renderMaterialGrid();
+            }
+        }
+    } catch (e) {
+        console.error(e);
+        showToast("Failed to save image display fit.", "error");
+    }
 };
 
 // ==========================================
@@ -2181,22 +2309,12 @@ window.publishCustomStandaloneMaterial = async () => {
 
     try {
         const cleanName = subjectName.trim();
-        const docRef = doc(db, "Curriculum", selectedClass);
-        await updateDoc(docRef, {
+        await setDoc(doc(db, "Curriculum", selectedClass), {
             subjects: arrayUnion(cleanName),
-            [`pdf_links.${cleanName}`]: pdfUrl,
-            [`image_links.${cleanName}`]: imgUrl,
-            [`book_editions.${cleanName}`]: "2026_v1"
-        }).catch(async (e) => {
-            if (e.code === 'not-found') {
-                await setDoc(docRef, {
-                    subjects: [cleanName],
-                    pdf_links: { [cleanName]: pdfUrl },
-                    image_links: { [cleanName]: imgUrl },
-                    book_editions: { [cleanName]: "2026_v1" }
-                });
-            } else throw e;
-        });
+            pdf_links: { [cleanName]: pdfUrl },
+            image_links: { [cleanName]: imgUrl },
+            book_editions: { [cleanName]: "2026_v1" }
+        }, { merge: true });
         showToast(`Published "${cleanName}" to ${selectedClass}!`, "success");
         loadDashboard();
     } catch (e) {
@@ -2205,37 +2323,8 @@ window.publishCustomStandaloneMaterial = async () => {
     }
 };
 
-window.upgradeSubjectEdition = async (subjectName, className) => {
-    const item = globalMergedData[subjectName];
-    if (!item) return;
-
-    const newPdfUrl = prompt(
-        `Upgrade "${subjectName}" (${className})\nCurrent Edition: ${item.edition || "2026_v1"}\n\n1. Paste the NEW Edition PDF URL:`,
-        item.pdfUrl
-    );
-    if (!newPdfUrl || !newPdfUrl.trim()) return;
-
-    const newEdition = prompt("2. New Edition Tag (e.g., 2027_v1):", "2027_v1");
-    if (!newEdition || !newEdition.trim()) return;
-
-    try {
-        const docRef = doc(db, "Curriculum", className);
-        await updateDoc(docRef, {
-            archived_books: arrayUnion({
-                name: subjectName,
-                edition: item.edition || "2026_v1",
-                pdf_url: item.pdfUrl,
-                cover_url: item.imgUrl || ""
-            }),
-            [`pdf_links.${subjectName}`]: newPdfUrl.trim(),
-            [`book_editions.${subjectName}`]: newEdition.trim()
-        });
-        showToast(`"${subjectName}" upgraded to ${newEdition.trim()} & old edition archived!`, "success");
-        loadDashboard();
-    } catch (e) {
-        console.error(e);
-        showToast("Failed to upgrade book edition.", "error");
-    }
+window.upgradeSubjectEdition = (subjectName, className) => {
+    moveLiveBookToOld(subjectName, className);
 };
 
 // ==========================================
