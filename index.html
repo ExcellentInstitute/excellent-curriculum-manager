@@ -7,7 +7,7 @@
     
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet">
+    
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -50,9 +50,7 @@
                 <button class="btn-secondary" onclick="moveFirebaseAiChunksToPc()" style="border-color: #05CD99; color: #05CD99;">
                     <i class='bx bx-transfer-alt'></i> Move AI JSONs (Firebase → PC)
                 </button>
-                <button class="btn-secondary" onclick="openCropModal()">
-                    <i class='bx bx-crop'></i> Crop Image Tool
-                </button>
+                
                 <div class="admin-profile">
                     <div class="avatar"><i class='bx bx-user'></i></div>
                     <span>Admin Active</span>
@@ -595,32 +593,56 @@
         </div>
     </div>
 
-    <div id="cropModal" class="modal-overlay hidden">
-        <div class="modal-card" style="max-width: 800px; width: 95%;">
+    <!-- LIVE IMAGE FIT & DISPLAY FRAME EDITOR (NO NEW IMAGE CREATED — SAVES DIRECTLY TO APP!) -->
+    <div id="imageFitModal" class="modal-overlay hidden">
+        <div class="modal-card" style="max-width: 560px; width: 95%;">
             <div class="modal-header">
-                <h3>Image Crop Studio (2:3 App Ratio)</h3>
-                <button class="btn-icon" onclick="closeCropModal()"><i class='bx bx-x'></i></button>
+                <h3>🖼️ Fit &amp; Frame Image for Phone</h3>
+                <button class="btn-icon" onclick="closeImageFitModal()"><i class='bx bx-x'></i></button>
             </div>
-            <p class="modal-subtitle">Upload a local image, crop it perfectly for the Android Cards, and download it for GitHub.</p>
-            <div style="margin-top: 16px; margin-bottom: 16px;">
-                <input type="file" id="cropFileInput" accept="image/*" style="display: block; margin-bottom: 12px;">
+            <p id="fitModalSubtitle" class="modal-subtitle">Exact preview of what students see inside the Android phone card box.</p>
+
+            <!-- Exact Phone 2-Column Card Replica (170x140 Android Ratio) -->
+            <div style="display:flex; justify-content:center; margin: 14px 0;">
+                <div style="width: 240px; border-radius: 20px; overflow: hidden; border: 2.5px solid #4318FF; background: #ffffff; box-shadow: 0 8px 20px rgba(0,0,0,0.12);">
+                    <div id="fitPreviewBox" style="position: relative; width: 240px; height: 198px; overflow: hidden; background: #f1f5f9;">
+                        <img id="fitPreviewImg" src="" alt="Preview" style="position:absolute; top:0; left:0; user-select:none; pointer-events:none;">
+                    </div>
+                    <div id="fitPreviewCardTitle" style="padding: 12px; text-align: center; font-weight: 700; font-size: 15px; color: #1B2559; background: white;">
+                        Subject / Class
+                    </div>
+                </div>
             </div>
-            <div class="crop-container" style="height: 400px; background: #e9ecef; border-radius: 8px; overflow: hidden; display: flex; justify-content: center; align-items: center;">
-                <img id="cropImageTarget" style="max-width: 100%; display: none;">
-                <span id="cropPlaceholderText" style="color: #6c757d;">Select an image to start cropping</span>
+
+            <!-- 3 Instant Fit Mode Buttons -->
+            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                <button type="button" id="btnFitContain" class="btn-secondary" onclick="setFitMode('contain')" style="font-size:12px; padding:9px 6px;">📐 Fit Whole Image</button>
+                <button type="button" id="btnFitCover" class="btn-secondary" onclick="setFitMode('cover')" style="font-size:12px; padding:9px 6px;">🖼️ Fill &amp; Position</button>
+                <button type="button" id="btnFitFill" class="btn-secondary" onclick="setFitMode('fill')" style="font-size:12px; padding:9px 6px;">↔️ Stretch Fill</button>
             </div>
-            <div style="margin-top: 12px;">
-                <select id="cropExportFormat" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #cbd5e1; font-size:13px;">
-                    <option value="image/webp">Export as .webp (Smallest File — Best for App)</option>
-                    <option value="image/png">Export as .png (Lossless / Transparent)</option>
-                    <option value="image/jpeg">Export as .jpg (Standard JPEG)</option>
-                </select>
+
+            <!-- Focus & Zoom Sliders (Active in Fill & Position Mode) -->
+            <div id="fitPositionControls" style="background:#F8FAFC; padding:12px; border-radius:12px; border:1px solid #E2E8F0; margin-bottom: 12px;">
+                <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#334155;">
+                    <span>Vertical Position (Top ↔ Bottom)</span><span id="fitYVal">50%</span>
+                </div>
+                <input type="range" id="fitYSlider" min="0" max="100" value="50" oninput="updateFitPreviewLive()" style="width:100%; margin-bottom:8px;">
+
+                <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#334155;">
+                    <span>Horizontal Position (Left ↔ Right)</span><span id="fitXVal">50%</span>
+                </div>
+                <input type="range" id="fitXSlider" min="0" max="100" value="50" oninput="updateFitPreviewLive()" style="width:100%; margin-bottom:8px;">
+
+                <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#334155;">
+                    <span>Zoom</span><span id="fitZVal">1.00x</span>
+                </div>
+                <input type="range" id="fitZSlider" min="100" max="250" value="100" oninput="updateFitPreviewLive()" style="width:100%;">
             </div>
+
             <div class="modal-actions">
-                <button class="btn-secondary" onclick="closeCropModal()">Cancel</button>
-                <button class="btn-primary" onclick="downloadCroppedImage()" id="btnDownloadCrop" disabled>
-                    <i class='bx bx-download'></i> Download Cropped Image
-                </button>
+                <button class="btn-secondary" onclick="resetFitValues()">Reset</button>
+                <button class="btn-secondary" onclick="closeImageFitModal()">Cancel</button>
+                <button class="btn-primary" onclick="saveImageFitToApp()">✅ Save Display Fit to App</button>
             </div>
         </div>
     </div>
@@ -644,7 +666,6 @@
 
     <div id="toast-container" class="toast-container"></div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script type="module" src="app.js"></script>
 </body>
