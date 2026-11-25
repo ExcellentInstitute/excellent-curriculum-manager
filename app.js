@@ -20,7 +20,8 @@ const firebaseConfig = {
 
 const GITHUB_OWNER = "ExcellentInstitute"; 
 const GITHUB_REPO = "excellent-curriculum-manager";
-const WORKER_NOTIFY_URL = "https://foxy-olearning-proxy.pkb9658-pkb-pkb.workers.dev/admin/notify";
+const WORKER_PROXY_URL = "https://foxy-olearning-proxy.pkb9658-pkb-pkb.workers.dev";
+const WORKER_NOTIFY_URL = `${WORKER_PROXY_URL}/admin/notify`;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -536,6 +537,7 @@ async function loadDashboard() {
         systemStatus.style.color = "var(--success)";
 
         updateQuietHoursIndicator();
+        await loadAiModelsAndHealthAlerts();
         renderAdminNoticesList();
         populateExamRepoImagePicker();
         renderAdminExamPapersList();
@@ -1900,7 +1902,8 @@ function showToast(message, type) {
 window.moveFirebaseAiChunksToPc = async () => {
     try {
         const snap = await getDocs(collection(db, "AiPendingChunks"));
-        if (snap.empty) {
+        const chunkDocs = snap.docs.filter(d => d.id !== "__model_health__");
+        if (chunkDocs.length === 0) {
             showToast("No pending AI chunks in Firebase right now!", "error");
             return;
         }
@@ -1923,7 +1926,7 @@ window.moveFirebaseAiChunksToPc = async () => {
         const reportLines = [];
         const zip = new window.JSZip();
 
-        for (const docSnap of snap.docs) {
+        for (const docSnap of chunkDocs) {
             const raw = docSnap.data();
             if (raw.needs_improvement === true) dislikedCount++;
 
@@ -1986,7 +1989,7 @@ window.moveFirebaseAiChunksToPc = async () => {
             reportLines.join("\n")
         );
 
-        const summaryMsg = `Found ${snap.size} chunk(s): ${newCount} Brand New, ${mergedCount} Merged Updates` +
+        const summaryMsg = `Found ${chunkDocs.length} chunk(s): ${newCount} Brand New, ${mergedCount} Merged Updates` +
             (dislikedCount > 0 ? `, ⚠️ ${dislikedCount} flagged 👎` : "") +
             `\n\nDownload clean ZIP now?`;
         if (!confirm(summaryMsg)) return;
@@ -2000,11 +2003,11 @@ window.moveFirebaseAiChunksToPc = async () => {
         URL.revokeObjectURL(url);
 
         setTimeout(async () => {
-            if (confirm(`Did the ZIP download cleanly?\nClick OK to DELETE these ${snap.size} exported doc(s) from Firestore.`)) {
-                for (const docSnap of snap.docs) {
+            if (confirm(`Did the ZIP download cleanly?\nClick OK to DELETE these ${chunkDocs.length} exported doc(s) from Firestore.`)) {
+                for (const docSnap of chunkDocs) {
                     await deleteDoc(doc(db, "AiPendingChunks", docSnap.id));
                 }
-                showToast(`Cleared ${snap.size} chunk(s) from Firestore!`, "success");
+                showToast(`Cleared ${chunkDocs.length} chunk(s) from Firestore!`, "success");
             }
         }, 1200);
     } catch (e) {
@@ -2721,4 +2724,342 @@ window.bulkMoveSelectedToOld = async () => {
         console.error(e);
         showToast("Bulk archive failed.", "error");
     }
+};
+
+// ==========================================
+// 17. REMOTE AI MODELS MANAGER & DISCONTINUED MODEL ALERTS
+// ==========================================
+const DEFAULT_AI_MODELS = {
+    gemini_models_free: [
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        "gemini-3.6-flash",
+        "gemini-3.8-flash",
+        "gemini-2.5-flash-lite"
+    ],
+    gemini_models_pro: [
+        "gemini-3.8-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        "gemini-2.5-flash-lite"
+    ],
+    gemini_models_monthly: [
+        "gemini-4-hydrogen",
+        "gemini-3.8-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite"
+    ],
+    gemini_tts_models_free: [
+        "gemini-3.8-flash-lite-tts",
+        "gemini-3.8-flash-tts",
+        "gemini-3.1-flash-tts-preview",
+        "gemini-2.5-flash-tts"
+    ],
+    gemini_tts_models_monthly: [
+        "gemini-3.8-flash-tts",
+        "gemini-3.8-flash-lite-tts",
+        "gemini-3.1-flash-tts-preview",
+        "gemini-2.5-flash-tts"
+    ],
+    groq_vision_models: [
+        "qwen/qwen3.8-27b",
+        "meta-llama/llama-4-scout-17b-16e-instruct"
+    ],
+    groq_text_models: [
+        "openai/gpt-oss-120b",
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant"
+    ]
+};
+
+let currentAiModelsConfig = JSON.parse(JSON.stringify(DEFAULT_AI_MODELS));
+let detectedDeadModels = [];
+
+function parseModelLines(textareaId) {
+    const raw = document.getElementById(textareaId)?.value || "";
+    return [...new Set(raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean))];
+}
+
+function getAllConfiguredModelSet() {
+    return new Set([
+        ...currentAiModelsConfig.gemini_models_free,
+        ...currentAiModelsConfig.gemini_models_pro,
+        ...currentAiModelsConfig.gemini_models_monthly,
+        ...currentAiModelsConfig.gemini_tts_models_free,
+        ...currentAiModelsConfig.gemini_tts_models_monthly,
+        ...currentAiModelsConfig.groq_vision_models,
+        ...currentAiModelsConfig.groq_text_models
+    ]);
+}
+
+async function loadAiModelsAndHealthAlerts() {
+    try {
+        const cfgSnap = await getDoc(doc(db, "Admin", "AiConfig"));
+        const data = cfgSnap.exists() ? cfgSnap.data() : {};
+        Object.keys(DEFAULT_AI_MODELS).forEach(key => {
+            if (Array.isArray(data[key]) && data[key].length > 0) {
+                currentAiModelsConfig[key] = data[key].map(s => String(s).trim()).filter(Boolean);
+            } else {
+                currentAiModelsConfig[key] = [...DEFAULT_AI_MODELS[key]];
+            }
+        });
+
+        detectedDeadModels = [];
+        const healthSnap = await getDoc(doc(db, "AiPendingChunks", "__model_health__"));
+        if (healthSnap.exists()) {
+            const deadMap = healthSnap.data()?.dead_models || {};
+            const activeSet = getAllConfiguredModelSet();
+            Object.values(deadMap).forEach(entry => {
+                if (entry && entry.model && activeSet.has(entry.model)) {
+                    detectedDeadModels.push(entry);
+                }
+            });
+        }
+        renderDeadModelAlertUI();
+    } catch (e) {
+        console.error("Model health check error:", e);
+    }
+}
+
+function renderDeadModelAlertUI() {
+    const banner = document.getElementById("deadModelAlertBanner");
+    const bannerText = document.getElementById("deadModelAlertText");
+    const badge = document.getElementById("aiModelHealthBadge");
+    const modalBox = document.getElementById("modalDeadModelsBox");
+    const modalList = document.getElementById("modalDeadModelsList");
+
+    if (detectedDeadModels.length > 0) {
+        const names = detectedDeadModels.map(d => `${d.model} (HTTP ${d.http_code || 404})`).join(", ");
+        if (banner && bannerText) {
+            bannerText.innerText = `The following active model(s) returned HTTP 404 (discontinued/unavailable): ${names}. Swap or remove them now so students get instant replies.`;
+            banner.classList.remove("hidden");
+        }
+        if (badge) {
+            badge.innerText = `🚨 ${detectedDeadModels.length} Discontinued!`;
+            badge.style.background = "#FEE2E2";
+            badge.style.color = "#DC2626";
+        }
+        if (modalBox && modalList) {
+            modalList.innerHTML = detectedDeadModels.map(d => {
+                const when = d.last_seen_at ? new Date(d.last_seen_at).toLocaleString("en-IN") : "Recently";
+                return `<div>❌ <b>${d.model}</b> (${d.provider || "api"} • HTTP ${d.http_code || 404} • Detected: ${when})</div>`;
+            }).join("");
+            modalBox.classList.remove("hidden");
+        }
+        // Optional desktop browser alert if permission already granted
+        if ("Notification" in window && Notification.permission === "granted") {
+            new Notification("🚨 Excellent Institute AI Model Alert", {
+                body: `Discontinued model detected: ${names}`
+            });
+        }
+    } else {
+        banner?.classList.add("hidden");
+        modalBox?.classList.add("hidden");
+        if (badge) {
+            badge.innerText = "✅ All Models Healthy";
+            badge.style.background = "#E6FBF5";
+            badge.style.color = "#05CD99";
+        }
+    }
+}
+
+window.openAiModelsModal = async () => {
+    await loadAiModelsAndHealthAlerts();
+    document.getElementById("inputGeminiFree").value = currentAiModelsConfig.gemini_models_free.join("\n");
+    document.getElementById("inputGeminiPro").value = currentAiModelsConfig.gemini_models_pro.join("\n");
+    document.getElementById("inputGeminiMonthly").value = currentAiModelsConfig.gemini_models_monthly.join("\n");
+    document.getElementById("inputTtsFree").value = currentAiModelsConfig.gemini_tts_models_free.join("\n");
+    document.getElementById("inputTtsMonthly").value = currentAiModelsConfig.gemini_tts_models_monthly.join("\n");
+    document.getElementById("inputGroqVision").value = currentAiModelsConfig.groq_vision_models.join("\n");
+    document.getElementById("inputGroqText").value = currentAiModelsConfig.groq_text_models.join("\n");
+    document.getElementById("modelHealthResults").classList.add("hidden");
+    document.getElementById("aiModelsModal").classList.remove("hidden");
+};
+
+window.closeAiModelsModal = () => {
+    document.getElementById("aiModelsModal").classList.add("hidden");
+};
+
+window.resetAiModelDefaults = () => {
+    if (!confirm("Reset all 7 model lists to the verified defaults? (Click Save afterwards to apply live.)")) return;
+    document.getElementById("inputGeminiFree").value = DEFAULT_AI_MODELS.gemini_models_free.join("\n");
+    document.getElementById("inputGeminiPro").value = DEFAULT_AI_MODELS.gemini_models_pro.join("\n");
+    document.getElementById("inputGeminiMonthly").value = DEFAULT_AI_MODELS.gemini_models_monthly.join("\n");
+    document.getElementById("inputTtsFree").value = DEFAULT_AI_MODELS.gemini_tts_models_free.join("\n");
+    document.getElementById("inputTtsMonthly").value = DEFAULT_AI_MODELS.gemini_tts_models_monthly.join("\n");
+    document.getElementById("inputGroqVision").value = DEFAULT_AI_MODELS.groq_vision_models.join("\n");
+    document.getElementById("inputGroqText").value = DEFAULT_AI_MODELS.groq_text_models.join("\n");
+    showToast("Defaults loaded into fields. Click 'Save Models Live to App' to publish.", "success");
+};
+
+window.removeDeadModelsFromInputs = () => {
+    const deadSet = new Set(detectedDeadModels.map(d => d.model));
+    if (deadSet.size === 0) return;
+    const ids = [
+        "inputGeminiFree", "inputGeminiPro", "inputGeminiMonthly",
+        "inputTtsFree", "inputTtsMonthly", "inputGroqVision", "inputGroqText"
+    ];
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const kept = el.value.split(/[\n,]+/).map(s => s.trim()).filter(s => s && !deadSet.has(s));
+        el.value = kept.join("\n");
+    });
+    showToast(`Removed ${deadSet.size} dead model(s) from lists! Click 'Save Models Live to App' to push.`, "success");
+};
+
+window.clearDeadModelAlerts = async () => {
+    try {
+        await deleteDoc(doc(db, "AiPendingChunks", "__model_health__"));
+        detectedDeadModels = [];
+        renderDeadModelAlertUI();
+        showToast("Cleared discontinued model alerts.", "success");
+    } catch (e) {
+        console.error(e);
+        showToast("Could not clear alerts.", "error");
+    }
+};
+
+window.saveAiModelsToFirebase = async () => {
+    const nextConfig = {
+        gemini_models_free: parseModelLines("inputGeminiFree"),
+        gemini_models_pro: parseModelLines("inputGeminiPro"),
+        gemini_models_monthly: parseModelLines("inputGeminiMonthly"),
+        gemini_tts_models_free: parseModelLines("inputTtsFree"),
+        gemini_tts_models_monthly: parseModelLines("inputTtsMonthly"),
+        groq_vision_models: parseModelLines("inputGroqVision"),
+        groq_text_models: parseModelLines("inputGroqText"),
+        updated_at: Date.now()
+    };
+
+    if (nextConfig.gemini_models_free.length === 0 || nextConfig.gemini_tts_models_free.length === 0) {
+        return showToast("Keep at least 1 model in Gemini Free & Voice TTS lists!", "error");
+    }
+
+    try {
+        await setDoc(doc(db, "Admin", "AiConfig"), nextConfig, { merge: true });
+        currentAiModelsConfig = nextConfig;
+        // Re-check if any old dead alerts are still inside the updated lists
+        const activeSet = getAllConfiguredModelSet();
+        detectedDeadModels = detectedDeadModels.filter(d => activeSet.has(d.model));
+        if (detectedDeadModels.length === 0) {
+            await deleteDoc(doc(db, "AiPendingChunks", "__model_health__")).catch(() => {});
+        }
+        renderDeadModelAlertUI();
+        closeAiModelsModal();
+        showToast("✅ AI Models updated live in Firestore! Apps will sync automatically on next launch.", "success");
+    } catch (e) {
+        console.error(e);
+        showToast("Failed to save AI models to Firestore.", "error");
+    }
+};
+
+function getWorkerAppToken() {
+    let tok = sessionStorage.getItem("worker_app_token") || "";
+    if (!tok) {
+        tok = prompt("Enter your Cloudflare Worker X-App-Token (same as worker_app_token in strings.xml — kept only for this browser tab):") || "";
+        if (tok.trim()) sessionStorage.setItem("worker_app_token", tok.trim());
+    }
+    return tok.trim();
+}
+
+window.resetWorkerAppToken = () => {
+    sessionStorage.removeItem("worker_app_token");
+    const next = getWorkerAppToken();
+    if (next) showToast("Worker token saved for this tab!", "success");
+};
+
+window.runLiveModelHealthCheck = async () => {
+    const token = getWorkerAppToken();
+    if (!token) return showToast("Live test cancelled (no Worker token).", "error");
+
+    const resultsBox = document.getElementById("modelHealthResults");
+    const btn = document.getElementById("btnRunModelHealthCheck");
+    resultsBox.classList.remove("hidden");
+    resultsBox.innerHTML = "⏳ Testing every configured model live through Cloudflare Worker...";
+    btn.disabled = true;
+
+    const geminiTextSet = new Set([
+        ...parseModelLines("inputGeminiFree"),
+        ...parseModelLines("inputGeminiPro"),
+        ...parseModelLines("inputGeminiMonthly")
+    ]);
+    const geminiTtsSet = new Set([
+        ...parseModelLines("inputTtsFree"),
+        ...parseModelLines("inputTtsMonthly")
+    ]);
+    const groqSet = new Set([
+        ...parseModelLines("inputGroqVision"),
+        ...parseModelLines("inputGroqText")
+    ]);
+
+    const rows = [];
+    const newlyDead = {};
+
+    async function probe(provider, model, payload) {
+        try {
+            const res = await fetch(WORKER_PROXY_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-App-Token": token },
+                body: JSON.stringify({ provider, model, payload, isPro: false, tier: "free" })
+            });
+            const errTxt = res.ok ? "" : (await res.text().catch(() => "")).slice(0, 140);
+            const looksRetired = res.status === 404 ||
+                /not found|deprecated|decommissioned|no longer available/i.test(errTxt);
+
+            if (res.status === 200) {
+                rows.push(`<div>✅ <b>${model}</b> — Active (HTTP 200)</div>`);
+            } else if (res.status === 429) {
+                rows.push(`<div>⚠️ <b>${model}</b> — Active, currently rate-limited (HTTP 429)</div>`);
+            } else if (res.status === 401 || res.status === 403) {
+                rows.push(`<div>🔑 <b>${model}</b> — Auth/Token error (HTTP ${res.status})</div>`);
+            } else if (looksRetired) {
+                rows.push(`<div style="color:#DC2626;">❌ <b>${model}</b> — DISCONTINUED / NOT FOUND (HTTP ${res.status})</div>`);
+                const safeKey = model.replace(/[^a-zA-Z0-9_-]/g, "_");
+                newlyDead[safeKey] = { model, provider, http_code: res.status, last_seen_at: Date.now() };
+            } else {
+                rows.push(`<div style="color:#D97706;">⚠️ <b>${model}</b> — HTTP ${res.status} ${errTxt ? "(" + errTxt.replace(/</g, "&lt;") + ")" : ""}</div>`);
+            }
+        } catch (e) {
+            rows.push(`<div style="color:#D97706;">⚠️ <b>${model}</b> — Network/CORS error</div>`);
+        }
+        resultsBox.innerHTML = rows.join("");
+    }
+
+    for (const m of geminiTextSet) {
+        await probe("gemini", m, {
+            contents: [{ parts: [{ text: "ok" }] }],
+            generationConfig: { maxOutputTokens: 4 }
+        });
+    }
+    for (const m of geminiTtsSet) {
+        await probe("gemini", m, {
+            contents: [{ parts: [{ text: "Hi" }] }],
+            generationConfig: {
+                responseModalities: ["AUDIO"],
+                speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Leda" } } }
+            }
+        });
+    }
+    for (const m of groqSet) {
+        await probe("groq_chat", m, {
+            model: m,
+            max_tokens: 4,
+            messages: [{ role: "user", content: "ok" }]
+        });
+    }
+
+    if (Object.keys(newlyDead).length > 0) {
+        await setDoc(doc(db, "AiPendingChunks", "__model_health__"), {
+            dead_models: newlyDead,
+            updated_at: Date.now()
+        }, { merge: true }).catch(() => {});
+        await loadAiModelsAndHealthAlerts();
+        showToast(`🚨 Found ${Object.keys(newlyDead).length} discontinued model(s)!`, "error");
+    } else {
+        showToast("✅ Live Health Check complete — no discontinued models found!", "success");
+    }
+    btn.disabled = false;
 };
