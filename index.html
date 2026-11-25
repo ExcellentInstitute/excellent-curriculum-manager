@@ -62,6 +62,22 @@
         </header>
 
         <main class="dashboard-content">
+
+            <!-- AUTO DISCONTINUED AI MODEL ALERT BANNER -->
+            <div id="deadModelAlertBanner" class="hidden" style="background:#FEF2F2; border:1.5px solid #EF4444; color:#991B1B; padding:14px 18px; border-radius:14px; margin-bottom:18px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:240px;">
+                    <div style="font-weight:700; font-size:14px;">🚨 Discontinued AI Model Alert Detected!</div>
+                    <div id="deadModelAlertText" style="font-size:12.5px; margin-top:3px;"></div>
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button class="btn-primary" onclick="openAiModelsModal()" style="background:#DC2626; padding:8px 14px; font-size:12px;">
+                        🛠️ Fix / Swap Models
+                    </button>
+                    <button class="btn-secondary" onclick="clearDeadModelAlerts()" style="padding:8px 12px; font-size:12px; border-color:#DC2626; color:#DC2626;">
+                        Dismiss
+                    </button>
+                </div>
+            </div>
             
             <section class="stats-row">
                 <div class="stat-card">
@@ -376,11 +392,17 @@
                         </div>
 
                         <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-soft);">
-                            <h3 style="margin-bottom: 6px;">🦊 Foxy AI Quota & PDF Backup Mirror</h3>
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
+                                <h3 style="margin:0;">🦊 Foxy AI Models, Quota &amp; Mirror</h3>
+                                <span id="aiModelHealthBadge" style="font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; background:#E6FBF5; color:#05CD99;">Checking Models...</span>
+                            </div>
                             <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-                                Toggle the remote Pro daily quota switch (API keys are safely locked inside Cloudflare Worker Secrets) or link a free backup PDF mirror.
+                                Swap Gemini/Groq models live without an APK rebuild, get alerts if any model is discontinued, or toggle the Pro daily quota switch.
                             </p>
                             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <button class="btn-primary" onclick="openAiModelsModal()" style="width:100%;">
+                                    <i class='bx bx-chip'></i> 🤖 Manage AI Models &amp; Live Health Check
+                                </button>
                                 <button class="btn-secondary" onclick="manageAiConfigAndProSwitch()" style="flex: 1; border-color:#FF8F00; color:#FF8F00;">
                                     <i class='bx bx-bot'></i> Pro Quota Switch
                                 </button>
@@ -661,6 +683,83 @@
                 ⚠️ Large PDF (&gt;20 MB): Browser preview may not render oversized files. Click <b>Open New Tab ↗</b> above to verify directly.
             </div>
             <iframe id="pdfReaderFrame" src="" style="flex:1; width:100%; border:1px solid #cbd5e1; border-radius:10px; background:#f8fafc;"></iframe>
+        </div>
+    </div>
+
+    <!-- REMOTE AI MODELS MANAGER & LIVE HEALTH CHECK MODAL -->
+    <div id="aiModelsModal" class="modal-overlay hidden">
+        <div class="modal-card" style="max-width: 720px; width: 96%; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h3>🤖 Remote AI Models Manager (Zero APK Rebuild)</h3>
+                <button class="btn-icon" onclick="closeAiModelsModal()"><i class='bx bx-x'></i></button>
+            </div>
+            <p class="modal-subtitle">
+                Enter <b>1 model ID per line</b> in priority order (top = primary, below = automatic backups). Every installed Android app syncs these lists from Firestore <code>Admin/AiConfig</code> on its next session.
+            </p>
+
+            <!-- Reported Discontinued Models Box -->
+            <div id="modalDeadModelsBox" class="hidden" style="background:#FEF2F2; border:1px solid #FCA5A5; color:#991B1B; padding:12px; border-radius:10px; margin:12px 0; font-size:12.5px;">
+                <div style="font-weight:700; margin-bottom:4px;">🚨 Reported Discontinued / 404 Models:</div>
+                <div id="modalDeadModelsList" style="margin-bottom:8px;"></div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button type="button" class="btn-primary" onclick="removeDeadModelsFromInputs()" style="background:#DC2626; padding:6px 12px; font-size:12px;">
+                        🧹 Auto-Remove Dead Models from Lists
+                    </button>
+                    <button type="button" class="btn-secondary" onclick="clearDeadModelAlerts()" style="padding:6px 12px; font-size:12px;">
+                        Clear Alerts
+                    </button>
+                </div>
+            </div>
+
+            <!-- Live Test Controls -->
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
+                <button type="button" id="btnRunModelHealthCheck" class="btn-secondary" onclick="runLiveModelHealthCheck()" style="border-color:#4318FF; color:#4318FF; font-size:12.5px;">
+                    <i class='bx bx-pulse'></i> 🔍 Test All Models Live (via Worker)
+                </button>
+                <button type="button" class="btn-secondary" onclick="resetAiModelDefaults()" style="font-size:12.5px;">
+                    ↺ Load Verified Defaults
+                </button>
+                <button type="button" class="btn-secondary" onclick="resetWorkerAppToken()" style="font-size:12px;">
+                    🔑 Reset Worker Token
+                </button>
+            </div>
+
+            <div id="modelHealthResults" class="hidden" style="background:#F8FAFC; border:1px solid #CBD5E1; border-radius:10px; padding:10px; margin-bottom:14px; font-size:12px; max-height:170px; overflow-y:auto;"></div>
+
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap:12px;">
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155;">🆓 Gemini Free Models (Text &amp; Vision)</label>
+                    <textarea id="inputGeminiFree" rows="5" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; font-family:monospace; font-size:12px; margin-top:4px;"></textarea>
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155;">👑 Gemini Permanent Pro (₹100)</label>
+                    <textarea id="inputGeminiPro" rows="5" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; font-family:monospace; font-size:12px; margin-top:4px;"></textarea>
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155;">🚀 Gemini Monthly Super Tutor (₹49)</label>
+                    <textarea id="inputGeminiMonthly" rows="5" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; font-family:monospace; font-size:12px; margin-top:4px;"></textarea>
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155;">🔊 Gemini Voice TTS (Free &amp; ₹100 Pro)</label>
+                    <textarea id="inputTtsFree" rows="5" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; font-family:monospace; font-size:12px; margin-top:4px;"></textarea>
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155;">🎙️ Gemini Voice TTS (₹49 Monthly Studio)</label>
+                    <textarea id="inputTtsMonthly" rows="5" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; font-family:monospace; font-size:12px; margin-top:4px;"></textarea>
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155;">👁️ Groq Vision Backup Models</label>
+                    <textarea id="inputGroqVision" rows="3" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; font-family:monospace; font-size:12px; margin-top:4px;"></textarea>
+
+                    <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-top:8px;">⚡ Groq Text Models</label>
+                    <textarea id="inputGroqText" rows="3" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; font-family:monospace; font-size:12px; margin-top:4px;"></textarea>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 18px;">
+                <button class="btn-secondary" onclick="closeAiModelsModal()">Cancel</button>
+                <button class="btn-primary" onclick="saveAiModelsToFirebase()">💾 Save Models Live to App</button>
+            </div>
         </div>
     </div>
 
