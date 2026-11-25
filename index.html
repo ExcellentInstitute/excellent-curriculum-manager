@@ -7,8 +7,32 @@
     
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
-    
     <link rel="stylesheet" href="style.css">
+    <style>
+        .hint-strip {
+            background: #EEF2FF;
+            border-left: 4px solid #4318FF;
+            color: #1E293B;
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 12.5px;
+            line-height: 1.5;
+            margin-bottom: 18px;
+        }
+        .hint-strip b { color: #4318FF; }
+        .two-col-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 22px;
+            align-items: start;
+        }
+        .panel-card {
+            background: white;
+            border-radius: 20px;
+            padding: 22px;
+            box-shadow: var(--shadow-soft);
+        }
+    </style>
 </head>
 <body>
 
@@ -43,19 +67,15 @@
                 <div class="brand-logo small"><i class='bx bxs-graduation'></i></div>
                 <div>
                     <h3>Command Center</h3>
-                    <span class="version-tag">Deployment Engine v9.0 (GitHub Releases PDF Engine + Push + Exams + Editions)</span>
+                    <span class="version-tag">Deployment Engine v9.5 (Organized Workspace + Bulk Image Fit + AI Health)</span>
                 </div>
             </div>
             <div class="nav-actions">
-                <button class="btn-secondary" onclick="moveFirebaseAiChunksToPc()" style="border-color: #05CD99; color: #05CD99;">
-                    <i class='bx bx-transfer-alt'></i> Move AI JSONs (Firebase → PC)
-                </button>
-                
                 <div class="admin-profile">
                     <div class="avatar"><i class='bx bx-user'></i></div>
                     <span>Admin Active</span>
                 </div>
-                <button id="logoutBtn" class="btn-icon" title="Lock System">
+                <button id="logoutBtn" class="btn-icon" title="Lock System & Log Out">
                     <i class='bx bx-log-out-circle'></i>
                 </button>
             </div>
@@ -64,37 +84,39 @@
         <main class="dashboard-content">
 
             <!-- AUTO DISCONTINUED AI MODEL ALERT BANNER -->
-            <div id="deadModelAlertBanner" class="hidden" style="background:#FEF2F2; border:1.5px solid #EF4444; color:#991B1B; padding:14px 18px; border-radius:14px; margin-bottom:18px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-                <div style="flex:1; min-width:240px;">
-                    <div style="font-weight:700; font-size:14px;">🚨 Discontinued AI Model Alert Detected!</div>
-                    <div id="deadModelAlertText" style="font-size:12.5px; margin-top:3px;"></div>
-                </div>
-                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <button class="btn-primary" onclick="openAiModelsModal()" style="background:#DC2626; padding:8px 14px; font-size:12px;">
-                        🛠️ Fix / Swap Models
-                    </button>
-                    <button class="btn-secondary" onclick="clearDeadModelAlerts()" style="padding:8px 12px; font-size:12px; border-color:#DC2626; color:#DC2626;">
-                        Dismiss
-                    </button>
+            <div id="deadModelAlertBanner" class="hidden" style="background:#FEF2F2; border:1.5px solid #EF4444; color:#991B1B; padding:14px 18px; border-radius:14px; margin-bottom:18px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:240px;">
+                        <div style="font-weight:700; font-size:14px;">🚨 Discontinued AI Model Alert Detected!</div>
+                        <div id="deadModelAlertText" style="font-size:12.5px; margin-top:3px;"></div>
+                    </div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="btn-primary" onclick="openAiModelsModal()" style="background:#DC2626; padding:8px 14px; font-size:12px;">
+                            🛠️ Fix / Swap Models
+                        </button>
+                        <button class="btn-secondary" onclick="clearDeadModelAlerts()" style="padding:8px 12px; font-size:12px; border-color:#DC2626; color:#DC2626;">
+                            Dismiss
+                        </button>
+                    </div>
                 </div>
             </div>
             
             <section class="stats-row">
-                <div class="stat-card">
+                <div class="stat-card" title="Books currently visible to students inside the Android app">
                     <div class="stat-icon live-icon"><i class='bx bx-broadcast'></i></div>
                     <div class="stat-info">
                         <p>Live in App</p>
                         <h3 id="statLiveCount">--</h3>
                     </div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" title="Files uploaded to GitHub Releases/Repo that are not published yet">
                     <div class="stat-icon offline-icon"><i class='bx bx-archive-in'></i></div>
                     <div class="stat-info">
                         <p>Offline / Pending</p>
                         <h3 id="statOfflineCount">--</h3>
                     </div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" title="Total Live + Pending + Archived book entries">
                     <div class="stat-icon total-icon"><i class='bx bx-folder'></i></div>
                     <div class="stat-info">
                         <p>Total Scanned Files</p>
@@ -103,21 +125,42 @@
                 </div>
             </section>
 
-            <div class="tab-navigation" style="flex-wrap: wrap;">
-                <button id="tabSimulatorBtn" class="tab-btn active"><i class='bx bx-mobile-alt'></i> Interactive App Builder (Slide Drawer Simulator)</button>
-                <button id="tabMaterialsBtn" class="tab-btn"><i class='bx bx-book-open'></i> Manage Subjects</button>
-                <button id="tabClassesBtn" class="tab-btn"><i class='bx bx-image-alt'></i> Manage Class Covers</button>
+            <!-- 6 CLEAN, FOCUSED WORKSPACE TABS -->
+            <div class="tab-navigation" style="flex-wrap: wrap; gap: 8px;">
+                <button id="tabSimulatorBtn" class="tab-btn active" title="Preview your Android app & edit drawer menus/social links">
+                    <i class='bx bx-mobile-alt'></i> App Design
+                </button>
+                <button id="tabMaterialsBtn" class="tab-btn" title="Publish PDFs, assign covers, bulk fit images, and manage editions">
+                    <i class='bx bx-book-open'></i> Subjects &amp; Books
+                </button>
+                <button id="tabClassesBtn" class="tab-btn" title="Assign and fit cover images for Classes 1 to 10">
+                    <i class='bx bx-image-alt'></i> Class Covers
+                </button>
+                <button id="tabVideosLiveBtn" class="tab-btn" title="Manage YouTube Video Playlists, Live Class & Past Live recordings">
+                    <i class='bx bx-video'></i> Videos &amp; Live
+                </button>
+                <button id="tabNoticesExamsBtn" class="tab-btn" title="Send student Push Notifications, Notice Board updates & Exam Papers">
+                    <i class='bx bx-bell'></i> Notices &amp; Exams
+                </button>
+                <button id="tabAiSystemBtn" class="tab-btn" title="Manage AI models, Pro Quota Switch, AI JSON chunk exports & Privacy Policy">
+                    <i class='bx bx-chip'></i> AI &amp; System
+                </button>
             </div>
 
-            <!-- TAB 0: INTERACTIVE LIVE APP SIMULATOR & BUILDER -->
+            <!-- ====================================================== -->
+            <!-- TAB 1: APP DESIGN & LIVE SIMULATOR                     -->
+            <!-- ====================================================== -->
             <div id="simulatorView" class="view-section active">
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 28px; align-items: start;">
+                <div class="hint-strip">
+                    💡 <b>App Design Hint:</b> Click <b>☰</b> on the phone preview to open the drawer. Click any <b>✏️ pencil</b> icon to rename titles or tabs live in the app. Use the right panels to add extra web tabs (like Results or Notes) or edit your 4 social media links.
+                </div>
+                <div class="two-col-panel">
                     
                     <!-- Left: Interactive Phone Replica -->
-                    <div style="background: white; border-radius: 24px; padding: 24px; box-shadow: var(--shadow-soft); display: flex; flex-direction: column; align-items: center;">
+                    <div class="panel-card" style="display: flex; flex-direction: column; align-items: center;">
                         <h3 style="margin-bottom: 4px;">📱 Live Interactive App Replica</h3>
-                        <p style="font-size: 13px; color: var(--text-muted); text-align: center; margin-bottom: 12px;">
-                            Click <b>☰</b> to slide out the Navigation Drawer (contains Study Books, Video Classes, Live Class, 4 Official Logos & Bottom-Right Settings Gear)!
+                        <p style="font-size: 12.5px; color: var(--text-muted); text-align: center; margin-bottom: 12px;">
+                            Test how students see Home, Classes, Subjects, Videos &amp; the Slide-Out Drawer.
                         </p>
 
                         <div class="phone-frame" style="width: 340px; height: 660px; margin-top: 8px;">
@@ -126,15 +169,14 @@
                                 
                                 <!-- Sim Top Header -->
                                 <div style="display: flex; align-items: center; padding: 34px 12px 10px 12px; gap: 10px;">
-                                    <button onclick="toggleSimSidebar(true)" style="width: 40px; height: 40px; border-radius: 10px; background: #0052CC; color: white; font-size: 18px;">☰</button>
+                                    <button onclick="toggleSimSidebar(true)" title="Open App Navigation Drawer" style="width: 40px; height: 40px; border-radius: 10px; background: #0052CC; color: white; font-size: 18px;">☰</button>
                                     <div id="simHeaderTitle" onclick="editSimField('home_title_odia', 'Home Screen Title')" style="flex: 1; font-weight: 700; font-size: 16px; color: #1B2559; cursor: pointer;" title="Click to Edit Title">
                                         ମୁଖ୍ୟ ପୃଷ୍ଠା (Home) ✏️
                                     </div>
                                 </div>
 
-                                <!-- Sim Main Content Area (Blank Home by default!) -->
-                                <div id="simBodyArea" style="flex: 1; overflow-y: auto; padding: 8px 12px;">
-                                </div>
+                                <!-- Sim Main Content Area -->
+                                <div id="simBodyArea" style="flex: 1; overflow-y: auto; padding: 8px 12px;"></div>
 
                                 <!-- Sim Home Banner Ad Preview -->
                                 <div style="background: rgba(255,255,255,0.9); padding: 6px 8px; text-align: center; font-size: 10px; font-weight: 700; color: #0052CC; border-top: 1px solid #cbd5e1;">
@@ -145,37 +187,30 @@
                                 <div id="simSidebarBackdrop" onclick="toggleSimSidebar(false)" class="hidden" style="position: absolute; inset: 0; background: rgba(0,0,0,0.45); z-index: 25;"></div>
                                 <div id="simSidebarDrawer" style="position: absolute; top: 0; left: 0; width: 84%; height: 100%; background: white; z-index: 30; display: flex; flex-direction: column; transform: translateX(-105%); transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); box-shadow: 8px 0 25px rgba(0,0,0,0.25);">
                                     
-                                    <!-- Drawer Brand Header -->
                                     <div style="background: #0052CC; color: white; padding: 36px 14px 14px 14px; display: flex; align-items: center; justify-content: space-between;">
-                                        <div onclick="editSimField('footer_brand_text', 'Drawer Brand Title')" style="cursor: pointer;">
+                                        <div onclick="editSimField('footer_brand_text', 'Drawer Brand Title')" style="cursor: pointer;" title="Click to Edit Brand Title">
                                             <div id="simDrawerBrand" style="font-weight: 700; font-size: 14px;">Excellent Institute ✏️</div>
                                             <div style="font-size: 10px; opacity: 0.85;">Odisha Smart Learning</div>
                                         </div>
                                         <button onclick="toggleSimSidebar(false)" style="background: rgba(255,255,255,0.2); color: white; width: 28px; height: 28px; border-radius: 50%; font-size: 13px;">✕</button>
                                     </div>
 
-                                    <!-- Drawer Scrollable Navigation + Notices -->
                                     <div style="flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 6px;">
                                         <div id="simDrawerCoreNav" style="display: flex; flex-direction: column; gap: 6px;"></div>
                                         <hr style="border: none; border-top: 1px solid #E2E8F0; margin: 6px 0;">
                                         <div id="simSidebarItemsList" style="display: flex; flex-direction: column; gap: 6px;"></div>
-                                        <button onclick="addNewSidebarItem()" style="margin-top: 4px; background: #E6FBF5; color: #05CD99; padding: 8px; border-radius: 10px; font-size: 11px; font-weight: 700;">
+                                        <button onclick="addNewSidebarItem()" title="Add a text notice or link inside the drawer" style="margin-top: 4px; background: #E6FBF5; color: #05CD99; padding: 8px; border-radius: 10px; font-size: 11px; font-weight: 700;">
                                             + Add Sidebar Notice / Link
                                         </button>
                                     </div>
 
-                                    <!-- Drawer Bottom Bar: 4 Official SVG Logos + Bottom-Right Settings Gear -->
                                     <div style="height: 54px; background: #F4F7FE; padding: 0 10px; display: flex; align-items: center; border-top: 1px solid #E2E8F0; gap: 8px;">
-                                        
-                                        <!-- Official YouTube SVG Logo -->
                                         <div onclick="clickOrEditSocial('social_youtube', 'YouTube Channel Link')" title="YouTube (Click to Edit)" style="width: 34px; height: 34px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
                                             <svg viewBox="0 0 48 48" width="32" height="32">
                                                 <path fill="#FF0000" d="M43.2,33.9c-0.4,2.1-2.1,3.7-4.2,4c-3.3,0.5-8.8,1.1-15,1.1c-6.1,0-11.6-0.6-15-1.1c-2.1-0.3-3.8-1.9-4.2-4C4.4,31.6,4,28.2,4,24c0-4.2,0.4-7.6,0.8-9.9c0.4-2.1,2.1-3.7,4.2-4C12.3,9.6,17.8,9,24,9c6.2,0,11.6,0.6,15,1.1c2.1,0.3,3.8,1.9,4.2,4c0.4,2.3,0.9,5.7,0.9,9.9C44,28.2,43.6,31.6,43.2,33.9z"/>
                                                 <path fill="#FFFFFF" d="M20 31L20 17 32 24z"/>
                                             </svg>
                                         </div>
-
-                                        <!-- Official Instagram Gradient SVG Logo -->
                                         <div onclick="clickOrEditSocial('social_instagram', 'Instagram Profile Link')" title="Instagram (Click to Edit)" style="width: 34px; height: 34px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
                                             <svg viewBox="0 0 48 48" width="30" height="30">
                                                 <defs>
@@ -193,16 +228,12 @@
                                                 <circle cx="31.5" cy="16.5" r="1.8" fill="#FFF"/>
                                             </svg>
                                         </div>
-
-                                        <!-- Official Facebook SVG Logo -->
                                         <div onclick="clickOrEditSocial('social_facebook', 'Facebook Page Link')" title="Facebook (Click to Edit)" style="width: 34px; height: 34px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
                                             <svg viewBox="0 0 48 48" width="30" height="30">
                                                 <circle cx="24" cy="24" r="20" fill="#1877F2"/>
                                                 <path fill="#FFFFFF" d="M26.7,43.8V28.7h5.1l0.8-5.9h-5.9v-3.8c0-1.7,0.5-2.9,2.9-2.9h3.1v-5.3c-0.5-0.1-2.4-0.2-4.6-0.2c-4.5,0-7.6,2.8-7.6,7.8v4.4h-5.1v5.9h5.1v15.1H26.7z"/>
                                             </svg>
                                         </div>
-
-                                        <!-- Official Google Maps 4-Color Pin SVG Logo -->
                                         <div onclick="clickOrEditSocial('social_map', 'Google Maps Location Link')" title="Google Maps (Click to Edit)" style="width: 34px; height: 34px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
                                             <svg viewBox="0 0 48 48" width="30" height="30">
                                                 <path fill="#48B564" d="M35.76,26.36h0.01c0,0-3.77,5.53-6.94,9.64c-2.74,3.55-3.54,6.59-3.77,8.06C24.97,44.6,24.53,45,24,45s-0.97-0.4-1.06-0.94c-0.23-1.47-1.03-4.51-3.77-8.06c-0.42-0.55-0.85-1.12-1.28-1.7L28.24,22l8.33-9.88C37.49,14.05,38,16.21,38,18.5C38,21.4,37.17,24.09,35.76,26.36z"/>
@@ -212,214 +243,58 @@
                                                 <path fill="#5695F6" d="M19.83,14.92L19.76,15l-8.32,9.88C10.52,22.95,10,20.79,10,18.5c0-3.54,1.31-6.77,3.47-9.25L19.83,14.92z"/>
                                             </svg>
                                         </div>
-
                                         <div style="flex: 1;"></div>
-
-                                        <!-- Bottom-Right Settings Gear Icon inside Drawer -->
-                                        <div onclick="toggleSimTheme()" title="Settings Gear (Bottom Right of Drawer)" style="width: 34px; height: 34px; background: #4318FF; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: white; font-size: 18px;">
+                                        <div onclick="toggleSimTheme()" title="Preview Light / Dark Mode inside simulator" style="width: 34px; height: 34px; background: #4318FF; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: white; font-size: 18px;">
                                             <i class='bx bxs-cog'></i>
                                         </div>
                                     </div>
-
                                 </div>
 
                             </div>
                         </div>
                     </div>
 
-                    <!-- Right: Quick Control Panels -->
+                    <!-- Right: App Navigation & Social Links Only (Clean & Uncluttered!) -->
                     <div style="display: flex; flex-direction: column; gap: 20px;">
-                        
-                        <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-soft);">
-                            <h3 style="margin-bottom: 6px;">➕ Dynamic Drawer Sections (e.g., Exam, Results, Notes)</h3>
+                        <div class="panel-card">
+                            <h3 style="margin-bottom: 6px;">➕ Dynamic Drawer Sections</h3>
                             <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
-                                Add new sections linked to any GitHub Page or URL. They appear automatically inside the app's Slide-Out Drawer!
+                                Add extra buttons inside the app's Slide-Out Drawer linked to any GitHub Page or web URL (e.g., Results, Syllabus, Notes).
                             </p>
                             <div id="adminCustomSectionsList" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;"></div>
-                            <button class="btn-primary" onclick="addNewCustomSection()">
-                                <i class='bx bx-plus-circle'></i> Add New Drawer Section (e.g., 📝 Exam)
+                            <button class="btn-primary" onclick="addNewCustomSection()" title="Add a new clickable web page tab inside the app drawer">
+                                <i class='bx bx-plus-circle'></i> Add New Drawer Section
                             </button>
                         </div>
 
-                        <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-soft);">
+                        <div class="panel-card">
                             <h3 style="margin-bottom: 6px;">🔗 Drawer 4 Official Social Logos</h3>
                             <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
-                                Edit the links connected to the 4 official logos at the bottom of the slide-out drawer.
+                                Update the links behind the YouTube, Instagram, Facebook, and Google Maps icons at the bottom of the app drawer.
                             </p>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                                <button class="btn-secondary" onclick="editSimField('social_youtube', 'YouTube Link')" style="color:#FF0000; border-color:#FF0000;"><i class='bx bxl-youtube'></i> Edit YouTube</button>
-                                <button class="btn-secondary" onclick="editSimField('social_instagram', 'Instagram Link')" style="color:#E1306C; border-color:#E1306C;"><i class='bx bxl-instagram'></i> Edit Instagram</button>
-                                <button class="btn-secondary" onclick="editSimField('social_facebook', 'Facebook Link')" style="color:#1877F2; border-color:#1877F2;"><i class='bx bxl-facebook-circle'></i> Edit Facebook</button>
-                                <button class="btn-secondary" onclick="editSimField('social_map', 'Google Maps Link')" style="color:#05CD99; border-color:#05CD99;"><i class='bx bxs-map'></i> Edit Google Map</button>
-                            </div>
-                        </div>
-
-                        <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-soft);">
-                            <h3 style="margin-bottom: 6px;">🎬 Video Playlists Manager</h3>
-                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-                                Add YouTube videos organized by playlist (e.g., Class 10 Math). Thumbnails and titles load directly from YouTube!
-                            </p>
-                            <div id="adminVideoPlaylistsList" style="display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; margin-bottom: 12px;"></div>
-                            <button class="btn-secondary" onclick="addVideoToPlaylist()" style="width: 100%; border-color:#05CD99; color:#05CD99;">
-                                <i class='bx bx-video-plus'></i> + Add Video to Playlist
-                            </button>
-                        </div>
-
-                        <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-soft);">
-                            <h3 style="margin-bottom: 6px;">🔴 Live Class & Past Live Archive</h3>
-                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-                                Active Live video stays pinned at the top of Live Classes. Going live automatically archives the previous stream to Past Live Classes!
-                            </p>
-                            <div id="adminPastLivesList" style="display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto; margin-bottom: 12px;"></div>
-                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                                <button class="btn-secondary" onclick="goLiveAndArchivePrevious()" style="flex: 1; border-color:#EE5D50; color:#EE5D50;">
-                                    <i class='bx bx-broadcast'></i> Go Live (Archive Old)
-                                </button>
-                                <button class="btn-secondary" onclick="addPastLiveManually()" style="flex: 1; border-color:#4318FF; color:#4318FF;">
-                                    <i class='bx bx-history'></i> + Add Past Live
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- PUSH NOTIFICATION BROADCASTER (Connected to Side Drawer Notice Board) -->
-                        <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-soft);">
-                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
-                                <h3 style="margin:0;">🔔 Push Notification & Notice Board</h3>
-                                <span id="quietHoursBadge" style="font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; background:#E6FBF5; color:#05CD99;">Checking IST...</span>
-                            </div>
-                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">
-                                Wakes up locked student phones via Cloudflare Worker + FCM & updates the app's Side Drawer Notice Board. Regulated Quiet Hours: <b>9:00 PM – 7:00 AM IST</b>.
-                            </p>
-                            <input id="pushTitleInput" placeholder="Notification Title (e.g., 📢 Sunday Test Notice)" maxlength="90" style="width:100%;padding:9px;margin-bottom:8px;border:1px solid #cbd5e1;border-radius:8px;">
-                            <textarea id="pushBodyInput" rows="3" placeholder="Message (supports Odia, English & Emojis)..." maxlength="220" style="width:100%;padding:9px;margin-bottom:8px;border:1px solid #cbd5e1;border-radius:8px;font-family:inherit;"></textarea>
-                            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
-                                <select id="pushTopicSelect" style="flex:1;padding:9px;border:1px solid #cbd5e1;border-radius:8px;">
-                                    <option value="all_students">All Students (Class 1–10)</option>
-                                    <option value="class_1">Class 1 (ପ୍ରଥମ ଶ୍ରେଣୀ)</option>
-                                    <option value="class_2">Class 2 (ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ)</option>
-                                    <option value="class_3">Class 3 (ତୃତୀୟ ଶ୍ରେଣୀ)</option>
-                                    <option value="class_4">Class 4 (ଚତୁର୍ଥ ଶ୍ରେଣୀ)</option>
-                                    <option value="class_5">Class 5 (ପଞ୍ଚମ ଶ୍ରେଣୀ)</option>
-                                    <option value="class_6">Class 6 (ଷଷ୍ଠ ଶ୍ରେଣୀ)</option>
-                                    <option value="class_7">Class 7 (ସପ୍ତମ ଶ୍ରେଣୀ)</option>
-                                    <option value="class_8">Class 8 (ଅଷ୍ଟମ ଶ୍ରେଣୀ)</option>
-                                    <option value="class_9">Class 9 (ନବମ ଶ୍ରେଣୀ)</option>
-                                    <option value="class_10">Class 10 (ଦଶମ ଶ୍ରେଣୀ)</option>
-                                </select>
-                                <button class="btn-primary" onclick="sendManualNoticeAndPush()" style="flex:1;">🚀 Send Notice + Push</button>
-                            </div>
-                            <button class="btn-secondary" onclick="resetAdminPushSecret()" style="width:100%; font-size:12px; padding:6px; margin-bottom:12px;">
-                                🔑 Change / Reset Cloudflare Push Secret
-                            </button>
-                            <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">Sent Notices on Notice Board (Edit or Pull Back anytime):</div>
-                            <div id="adminNoticesList" style="display:flex; flex-direction:column; gap:6px; max-height:190px; overflow-y:auto;"></div>
-                        </div>
-
-                        <!-- EXAM ROUTINE & QUESTION PAPER PUBLISHER (Class-Wise, 3 Formats + Manage List) -->
-                        <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-soft);">
-                            <h3 style="margin-bottom: 6px;">📅 Exam Routine & Question Papers</h3>
-                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">
-                                Publish class-wise 1-subject or multi-subject exams in Rich Text (Bold/Italic/Emoji), Raw Question Images, or HTML Link.
-                            </p>
-                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
-                                <input id="examTitleInput" placeholder="Exam Title (e.g., Unit Test 1)" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
-                                <input id="examDateInput" placeholder="Date (e.g., 25 Nov 2026)" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
-                                <select id="examClassSelect" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
-                                    <option value="ALL">All Classes (1–10)</option>
-                                    <option value="ପ୍ରଥମ ଶ୍ରେଣୀ">Class 1 (ପ୍ରଥମ ଶ୍ରେଣୀ)</option>
-                                    <option value="ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ">Class 2 (ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ)</option>
-                                    <option value="ତୃତୀୟ ଶ୍ରେଣୀ">Class 3 (ତୃତୀୟ ଶ୍ରେଣୀ)</option>
-                                    <option value="ଚତୁର୍ଥ ଶ୍ରେଣୀ">Class 4 (ଚତୁର୍ଥ ଶ୍ରେଣୀ)</option>
-                                    <option value="ପଞ୍ଚମ ଶ୍ରେଣୀ">Class 5 (ପଞ୍ଚମ ଶ୍ରେଣୀ)</option>
-                                    <option value="ଷଷ୍ଠ ଶ୍ରେଣୀ">Class 6 (ଷଷ୍ଠ ଶ୍ରେଣୀ)</option>
-                                    <option value="ସପ୍ତମ ଶ୍ରେଣୀ">Class 7 (ସପ୍ତମ ଶ୍ରେଣୀ)</option>
-                                    <option value="ଅଷ୍ଟମ ଶ୍ରେଣୀ">Class 8 (ଅଷ୍ଟମ ଶ୍ରେଣୀ)</option>
-                                    <option value="ନବମ ଶ୍ରେଣୀ">Class 9 (ନବମ ଶ୍ରେଣୀ)</option>
-                                    <option value="ଦଶମ ଶ୍ରେଣୀ">Class 10 (ଦଶମ ଶ୍ରେଣୀ)</option>
-                                </select>
-                                <select id="examFormatSelect" onchange="toggleExamFormatInputs()" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
-                                    <option value="richtext">📝 Organized Rich Text</option>
-                                    <option value="images">🖼️ Raw Question Images</option>
-                                    <option value="html">🌐 HTML Webpage Link</option>
-                                </select>
-                            </div>
-                            <input id="examSubjectsInput" placeholder="Subject(s) comma-separated (e.g., Math, Science, Odia)" style="width:100%;padding:8px;margin-bottom:8px;border:1px solid #cbd5e1;border-radius:8px;">
-
-                            <!-- Mode 1: Rich Formatted Text Editor -->
-                            <div id="examRichTextWrap">
-                                <div style="display:flex; gap:5px; margin-bottom:6px; flex-wrap:wrap;">
-                                    <button type="button" onclick="formatExamText('bold')" style="padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;"><b>B</b></button>
-                                    <button type="button" onclick="formatExamText('italic')" style="padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;"><i>I</i></button>
-                                    <button type="button" onclick="formatExamText('underline')" style="padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;"><u>U</u></button>
-                                    <button type="button" onclick="formatExamText('insertUnorderedList')" style="padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;">• List</button>
-                                    <button type="button" onclick="formatExamText('insertOrderedList')" style="padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;">1. List</button>
-                                    <button type="button" onclick="insertExamEmoji('📝 ')" style="padding:4px 7px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">📝</button>
-                                    <button type="button" onclick="insertExamEmoji('⏰ ')" style="padding:4px 7px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">⏰</button>
-                                    <button type="button" onclick="insertExamEmoji('✅ ')" style="padding:4px 7px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">✅</button>
-                                    <button type="button" onclick="insertExamEmoji('⭐ ')" style="padding:4px 7px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">⭐</button>
-                                    <button type="button" onclick="insertExamEmoji('📅 ')" style="padding:4px 7px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">📅</button>
-                                </div>
-                                <div id="examRichEditor" contenteditable="true" style="min-height:110px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;margin-bottom:8px;font-size:13px;line-height:1.5;"></div>
-                            </div>
-
-                            <!-- Mode 2: Raw Question Paper Images -->
-                            <div id="examImagesWrap" class="hidden" style="margin-bottom:8px;">
-                                <div style="display:flex; gap:6px; margin-bottom:6px;">
-                                    <select id="examRepoImgPicker" style="flex:1;padding:7px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;">
-                                        <option value="">-- Quick Add Image from GitHub Repo --</option>
-                                    </select>
-                                    <button type="button" onclick="insertGithubImgToExam()" class="btn-secondary" style="padding:6px 10px;font-size:12px;">+ Add</button>
-                                </div>
-                                <textarea id="examImagesInput" rows="3" placeholder="Paste question paper image URLs (1 per line — supports .webp, .png, .jpg)..." style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-family:inherit;"></textarea>
-                            </div>
-
-                            <!-- Mode 3: HTML Webpage Link -->
-                            <input id="examHtmlUrlInput" class="hidden" placeholder="https://excellentinstitute.github.io/..." style="width:100%;padding:8px;margin-bottom:8px;border:1px solid #cbd5e1;border-radius:8px;">
-
-                            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
-                                <label style="font-size:12px; display:flex; align-items:center; gap:6px; cursor:pointer;">
-                                    <input type="checkbox" id="chkPushExamAlert" checked> 🔔 Send Push Alert
-                                </label>
-                                <select id="examPushTargetMode" style="padding:6px 8px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px;">
-                                    <option value="all">To: All Students (Recommended)</option>
-                                    <option value="class_only">To: Selected Class Topic Only</option>
-                                </select>
-                            </div>
-                            <button class="btn-primary" onclick="publishExamPaper()" style="width:100%; margin-bottom:14px;">📤 Publish Exam Paper</button>
-
-                            <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">Published Exam Papers (Live in App):</div>
-                            <div id="adminExamPapersList" style="display:flex; flex-direction:column; gap:6px; max-height:180px; overflow-y:auto;"></div>
-                        </div>
-
-                        <div style="background: white; border-radius: 20px; padding: 24px; box-shadow: var(--shadow-soft);">
-                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
-                                <h3 style="margin:0;">🦊 Foxy AI Models, Quota &amp; Mirror</h3>
-                                <span id="aiModelHealthBadge" style="font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; background:#E6FBF5; color:#05CD99;">Checking Models...</span>
-                            </div>
-                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-                                Swap Gemini/Groq models live without an APK rebuild, get alerts if any model is discontinued, or toggle the Pro daily quota switch.
-                            </p>
-                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                                <button class="btn-primary" onclick="openAiModelsModal()" style="width:100%;">
-                                    <i class='bx bx-chip'></i> 🤖 Manage AI Models &amp; Live Health Check
-                                </button>
-                                <button class="btn-secondary" onclick="manageAiConfigAndProSwitch()" style="flex: 1; border-color:#FF8F00; color:#FF8F00;">
-                                    <i class='bx bx-bot'></i> Pro Quota Switch
-                                </button>
-                                <button class="btn-secondary" onclick="setBackupPdfMirror()" style="flex: 1; border-color:#3B82F6; color:#3B82F6;">
-                                    <i class='bx bx-cloud'></i> Backup PDF Mirror
-                                </button>
-                                <button class="btn-secondary" onclick="editSimField('privacy_policy_url', 'Privacy Policy URL (Play Store Required)')" style="width:100%; border-color:#05CD99; color:#05CD99;">
-                                    <i class='bx bx-shield-quarter'></i> Edit Privacy Policy Link
-                                </button>
+                                <button class="btn-secondary" onclick="editSimField('social_youtube', 'YouTube Link')" title="Update YouTube channel URL" style="color:#FF0000; border-color:#FF0000;"><i class='bx bxl-youtube'></i> Edit YouTube</button>
+                                <button class="btn-secondary" onclick="editSimField('social_instagram', 'Instagram Link')" title="Update Instagram profile URL" style="color:#E1306C; border-color:#E1306C;"><i class='bx bxl-instagram'></i> Edit Instagram</button>
+                                <button class="btn-secondary" onclick="editSimField('social_facebook', 'Facebook Link')" title="Update Facebook page URL" style="color:#1877F2; border-color:#1877F2;"><i class='bx bxl-facebook-circle'></i> Edit Facebook</button>
+                                <button class="btn-secondary" onclick="editSimField('social_map', 'Google Maps Link')" title="Update Google Maps location URL" style="color:#05CD99; border-color:#05CD99;"><i class='bx bxs-map'></i> Edit Google Map</button>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- TAB 1: MANAGE SUBJECTS -->
+            <!-- ====================================================== -->
+            <!-- TAB 2: MANAGE SUBJECTS & BOOKS                         -->
+            <!-- ====================================================== -->
             <div id="materialsView" class="view-section hidden">
+                <div class="hint-strip">
+                    💡 <b>Button Guide:</b>
+                    <b>📄 Red PDF</b> = preview book &nbsp;|&nbsp;
+                    <b>🖼️ Green Frame</b> = fit/zoom 1 cover image &nbsp;|&nbsp;
+                    <b>📦 Orange Box</b> = upgrade to new edition or archive to Old Books &nbsp;|&nbsp;
+                    <b>🖼️ Bulk Fit Images</b> = apply 1 fit setting to all selected (or visible) live books at once!
+                </div>
+
                 <section class="controls-row">
                     <div class="search-box">
                         <i class='bx bx-search'></i>
@@ -427,7 +302,7 @@
                     </div>
                     <div class="filter-box">
                         <i class='bx bx-filter'></i>
-                        <select id="classFilter">
+                        <select id="classFilter" title="Filter books by Class">
                             <option value="ALL">All Classes</option>
                             <option value="ପ୍ରଥମ ଶ୍ରେଣୀ">ପ୍ରଥମ ଶ୍ରେଣୀ (Class 1)</option>
                             <option value="ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ">ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ (Class 2)</option>
@@ -443,7 +318,7 @@
                     </div>
                     <div class="filter-box">
                         <i class='bx bx-layer'></i>
-                        <select id="statusFilter" onchange="renderMaterialGrid()">
+                        <select id="statusFilter" onchange="renderMaterialGrid()" title="Filter by Live, Pending Offline, or Archived Old Books">
                             <option value="ALL">All Books (Live + Offline + Old)</option>
                             <option value="LIVE">🟢 Current (Live) Books</option>
                             <option value="OFFLINE">🟡 Offline / Pending Files</option>
@@ -452,37 +327,37 @@
                     </div>
                     <div class="filter-box">
                         <i class='bx bx-purchase-tag'></i>
-                        <select id="releaseFilter" onchange="renderMaterialGrid()">
+                        <select id="releaseFilter" onchange="renderMaterialGrid()" title="Filter PDFs by GitHub Release Tag">
                             <option value="ALL">All Releases / Sources</option>
                         </select>
                     </div>
                     <div class="filter-box">
                         <i class='bx bx-image'></i>
-                        <select id="imageFormatFilter" onchange="syncImageFormatFilter(this.value)">
+                        <select id="imageFormatFilter" onchange="syncImageFormatFilter(this.value)" title="Filter cover image dropdown list by file format">
                             <option value="ALL">All Formats (.webp / .png / .jpg)</option>
                             <option value="webp">.webp Only</option>
                             <option value="png">.png Only</option>
                             <option value="jpeg">.jpg / .jpeg Only</option>
                         </select>
                     </div>
-                    <button class="btn-secondary" onclick="migrateOldLinksToReleases()" style="border-color:#4318FF; color:#4318FF;">
+                    <button class="btn-secondary" onclick="migrateOldLinksToReleases()" title="Automatically replace old /materials/ PDF links with matching GitHub Releases Assets links" style="border-color:#4318FF; color:#4318FF;">
                         <i class='bx bx-transfer'></i> Migrate Old Links → Assets
                     </button>
-                    <button class="btn-secondary" onclick="publishCustomStandaloneMaterial()" style="border-color:#05CD99; color:#05CD99;">
+                    <button class="btn-secondary" onclick="publishCustomStandaloneMaterial()" title="Manually publish a custom PDF link or an Image-Only card (like a timetable)" style="border-color:#05CD99; color:#05CD99;">
                         <i class='bx bx-plus'></i> Add PDF / Image Only
                     </button>
-                    <button id="refreshBtn" class="btn-secondary">
+                    <button id="refreshBtn" class="btn-secondary" title="Re-scan GitHub Releases & materials/ folder for newly uploaded PDFs and images">
                         <i class='bx bx-refresh'></i> Sync Releases &amp; Repo
                     </button>
                 </section>
 
-                <!-- FAST BULK ACTION BAR (Work on multiple files in 1 click!) -->
+                <!-- FAST BULK ACTION BAR -->
                 <div style="background:white; padding:12px 16px; border-radius:14px; margin-bottom:14px; box-shadow:var(--shadow-soft); display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                    <label style="font-size:13px; font-weight:700; display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <label style="font-size:13px; font-weight:700; display:flex; align-items:center; gap:6px; cursor:pointer;" title="Tick or untick all visible cards below">
                         <input type="checkbox" id="chkSelectAllMaterials" onchange="toggleSelectAllVisible(this.checked)"> Select All Visible
                     </label>
                     <span id="bulkSelectedCount" style="font-size:12px; color:#4318FF; font-weight:700;">0 selected</span>
-                    <select id="bulkTargetClass" style="padding:7px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px;">
+                    <select id="bulkTargetClass" title="Choose the target Class before clicking Bulk Publish" style="padding:7px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px;">
                         <option value="">-- Pick Class for Bulk Publish --</option>
                         <option value="ପ୍ରଥମ ଶ୍ରେଣୀ">ପ୍ରଥମ ଶ୍ରେଣୀ (Class 1)</option>
                         <option value="ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ">ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ (Class 2)</option>
@@ -495,9 +370,10 @@
                         <option value="ନବମ ଶ୍ରେଣୀ">ନବମ ଶ୍ରେଣୀ (Class 9)</option>
                         <option value="ଦଶମ ଶ୍ରେଣୀ">ଦଶମ ଶ୍ରେଣୀ (Class 10)</option>
                     </select>
-                    <button class="btn-primary" onclick="bulkPublishSelected()" style="padding:7px 14px; font-size:12px;">🚀 Bulk Publish</button>
-                    <button class="btn-secondary" onclick="bulkMoveSelectedToOld()" style="padding:7px 14px; font-size:12px; border-color:#FF8F00; color:#FF8F00;">📦 Bulk Move to Old</button>
-                    <button class="btn-secondary" onclick="bulkTakeSelectedOffline()" style="padding:7px 14px; font-size:12px; border-color:#EE5D50; color:#EE5D50;">📥 Bulk Offline</button>
+                    <button class="btn-primary" onclick="bulkPublishSelected()" title="Publish all checked OFFLINE files into the selected Target Class" style="padding:7px 14px; font-size:12px;">🚀 Bulk Publish</button>
+                    <button class="btn-secondary" onclick="openBulkImageFitModal('BULK_SUBJECTS')" title="Apply 1 display fit (Fit Whole / Fill & Zoom / Stretch) to all checked Live subjects — or all visible Live subjects if none checked" style="padding:7px 14px; font-size:12px; border-color:#05CD99; color:#05CD99;">🖼️ Bulk Fit Images</button>
+                    <button class="btn-secondary" onclick="bulkMoveSelectedToOld()" title="Move all checked LIVE books into the Old / Archived Books section" style="padding:7px 14px; font-size:12px; border-color:#FF8F00; color:#FF8F00;">📦 Bulk Move to Old</button>
+                    <button class="btn-secondary" onclick="bulkTakeSelectedOffline()" title="Hide all checked LIVE books from the app" style="padding:7px 14px; font-size:12px; border-color:#EE5D50; color:#EE5D50;">📥 Bulk Offline</button>
                 </div>
 
                 <div id="systemStatus" class="status-indicator">
@@ -507,24 +383,32 @@
                 <section id="content-grid" class="content-grid"></section>
             </div>
 
-            <!-- TAB 2: MANAGE CLASS COVERS -->
+            <!-- ====================================================== -->
+            <!-- TAB 3: MANAGE CLASS COVERS                             -->
+            <!-- ====================================================== -->
             <div id="classCoversView" class="view-section hidden">
+                <div class="hint-strip">
+                    💡 <b>Class Covers Hint:</b> Pick cover images for Classes 1–10 and click <b>Save All Class Covers</b>. Use <b>🖼️ Bulk Fit All Classes</b> to set one uniform fit across all 10 cards at once, or click the green <b>🖼️</b> icon on any single class to override just that card.
+                </div>
                 <div class="section-header" style="margin-bottom: 24px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
                     <div>
                         <h2 style="font-size: 20px; color: var(--text-main);">Class Cover Manager</h2>
-                        <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Assign repository images (.webp, .png, .jpg) or paste a custom URL for the Android home screen.</p>
+                        <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Assign repository images (.webp, .png, .jpg) or paste a custom URL for the Android Study Books grid.</p>
                     </div>
                     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
                         <div class="filter-box">
                             <i class='bx bx-image'></i>
-                            <select id="classImageFormatFilter" onchange="syncImageFormatFilter(this.value)">
+                            <select id="classImageFormatFilter" onchange="syncImageFormatFilter(this.value)" title="Filter cover dropdown by format">
                                 <option value="ALL">All Formats (.webp / .png / .jpg)</option>
                                 <option value="webp">.webp Only</option>
                                 <option value="png">.png Only</option>
                                 <option value="jpeg">.jpg / .jpeg Only</option>
                             </select>
                         </div>
-                        <button class="btn-primary" onclick="saveAllClassCoversBulk()" style="padding:10px 18px;">
+                        <button class="btn-secondary" onclick="openBulkImageFitModal('BULK_CLASSES')" title="Set 1 display fit (Fit Whole / Fill & Position / Stretch) for all 10 Class Covers in 1 click" style="padding:10px 16px; border-color:#05CD99; color:#05CD99;">
+                            <i class='bx bx-frame'></i> 🖼️ Bulk Fit All Classes
+                        </button>
+                        <button class="btn-primary" onclick="saveAllClassCoversBulk()" title="Save every changed Class cover dropdown to Firebase in 1 click" style="padding:10px 18px;">
                             <i class='bx bx-save'></i> Save All Class Covers (1-Click)
                         </button>
                     </div>
@@ -532,9 +416,210 @@
                 <section id="class-covers-grid" class="content-grid"></section>
             </div>
 
+            <!-- ====================================================== -->
+            <!-- TAB 4: VIDEOS & LIVE CLASS                             -->
+            <!-- ====================================================== -->
+            <div id="videosLiveView" class="view-section hidden">
+                <div class="hint-strip">
+                    💡 <b>Videos &amp; Live Hint:</b> Paste any YouTube link — thumbnails and titles fetch automatically! Clicking <b>Go Live (Archive Old)</b> pins your new Live stream to the top and moves the previous stream into Past Live Classes.
+                </div>
+                <div class="two-col-panel">
+                    <div class="panel-card">
+                        <h3 style="margin-bottom: 6px;">🎬 Video Playlists Manager</h3>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+                            Add YouTube videos organized by playlist (e.g., Class 10 Math). Appears under <b>Video Classes</b> in the app.
+                        </p>
+                        <div id="adminVideoPlaylistsList" style="display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; margin-bottom: 12px;"></div>
+                        <button class="btn-secondary" onclick="addVideoToPlaylist()" title="Add a YouTube video link into a playlist & optionally notify students" style="width: 100%; border-color:#05CD99; color:#05CD99;">
+                            <i class='bx bx-video-plus'></i> + Add Video to Playlist
+                        </button>
+                    </div>
+
+                    <div class="panel-card">
+                        <h3 style="margin-bottom: 6px;">🔴 Live Class &amp; Past Live Archive</h3>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+                            Active Live video stays pinned at the top of <b>Live Classes</b>. Going live automatically archives the old stream below.
+                        </p>
+                        <div id="adminPastLivesList" style="display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto; margin-bottom: 12px;"></div>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button class="btn-secondary" onclick="goLiveAndArchivePrevious()" title="Start a new Live stream, archive the old one & optionally send a high-priority push alert" style="flex: 1; border-color:#EE5D50; color:#EE5D50;">
+                                <i class='bx bx-broadcast'></i> Go Live (Archive Old)
+                            </button>
+                            <button class="btn-secondary" onclick="addPastLiveManually()" title="Add an older recorded YouTube live video to the Past Live list" style="flex: 1; border-color:#4318FF; color:#4318FF;">
+                                <i class='bx bx-history'></i> + Add Past Live
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ====================================================== -->
+            <!-- TAB 5: NOTICES, PUSH ALERTS & EXAM PAPERS              -->
+            <!-- ====================================================== -->
+            <div id="noticesExamsView" class="view-section hidden">
+                <div class="hint-strip">
+                    💡 <b>Notices &amp; Exams Hint:</b> Push alerts use your Cloudflare <b>ADMIN_PUSH_SECRET</b> and respect Quiet Hours (9 PM–7 AM IST). Sent notices can be edited or pulled back anytime from the list below.
+                </div>
+                <div class="two-col-panel">
+                    <!-- Push Notifications -->
+                    <div class="panel-card">
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
+                            <h3 style="margin:0;">🔔 Push Notification &amp; Notice Board</h3>
+                            <span id="quietHoursBadge" style="font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; background:#E6FBF5; color:#05CD99;">Checking IST...</span>
+                        </div>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">
+                            Wakes up student phones via FCM &amp; posts to the app's Notice Board.
+                        </p>
+                        <input id="pushTitleInput" placeholder="Notification Title (e.g., 📢 Sunday Test Notice)" maxlength="90" style="width:100%;padding:9px;margin-bottom:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                        <textarea id="pushBodyInput" rows="3" placeholder="Message (supports Odia, English & Emojis)..." maxlength="220" style="width:100%;padding:9px;margin-bottom:8px;border:1px solid #cbd5e1;border-radius:8px;font-family:inherit;"></textarea>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+                            <select id="pushTopicSelect" title="Choose whether to alert All Students or one specific Class" style="flex:1;padding:9px;border:1px solid #cbd5e1;border-radius:8px;">
+                                <option value="all_students">All Students (Class 1–10)</option>
+                                <option value="class_1">Class 1 (ପ୍ରଥମ ଶ୍ରେଣୀ)</option>
+                                <option value="class_2">Class 2 (ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ)</option>
+                                <option value="class_3">Class 3 (ତୃତୀୟ ଶ୍ରେଣୀ)</option>
+                                <option value="class_4">Class 4 (ଚତୁର୍ଥ ଶ୍ରେଣୀ)</option>
+                                <option value="class_5">Class 5 (ପଞ୍ଚମ ଶ୍ରେଣୀ)</option>
+                                <option value="class_6">Class 6 (ଷଷ୍ଠ ଶ୍ରେଣୀ)</option>
+                                <option value="class_7">Class 7 (ସପ୍ତମ ଶ୍ରେଣୀ)</option>
+                                <option value="class_8">Class 8 (ଅଷ୍ଟମ ଶ୍ରେଣୀ)</option>
+                                <option value="class_9">Class 9 (ନବମ ଶ୍ରେଣୀ)</option>
+                                <option value="class_10">Class 10 (ଦଶମ ଶ୍ରେଣୀ)</option>
+                            </select>
+                            <button class="btn-primary" onclick="sendManualNoticeAndPush()" title="Publish to Notice Board and push notification to student phones" style="flex:1;">🚀 Send Notice + Push</button>
+                        </div>
+                        <button class="btn-secondary" onclick="resetAdminPushSecret()" title="Re-enter your Cloudflare ADMIN_PUSH_SECRET if it changed" style="width:100%; font-size:12px; padding:6px; margin-bottom:12px;">
+                            🔑 Change / Reset Cloudflare Push Secret
+                        </button>
+                        <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">Sent Notices on Notice Board (Edit ✏️ or Pull Back 🗑️ anytime):</div>
+                        <div id="adminNoticesList" style="display:flex; flex-direction:column; gap:6px; max-height:220px; overflow-y:auto;"></div>
+                    </div>
+
+                    <!-- Exam Routine & Question Papers -->
+                    <div class="panel-card">
+                        <h3 style="margin-bottom: 6px;">📅 Exam Routine &amp; Question Papers</h3>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">
+                            Publish class-wise exams in Rich Text, Question Paper Images, or an HTML Webpage Link.
+                        </p>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+                            <input id="examTitleInput" placeholder="Exam Title (e.g., Unit Test 1)" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                            <input id="examDateInput" placeholder="Date (e.g., 25 Nov 2026)" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                            <select id="examClassSelect" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                                <option value="ALL">All Classes (1–10)</option>
+                                <option value="ପ୍ରଥମ ଶ୍ରେଣୀ">Class 1 (ପ୍ରଥମ ଶ୍ରେଣୀ)</option>
+                                <option value="ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ">Class 2 (ଦ୍ୱିତୀୟ ଶ୍ରେଣୀ)</option>
+                                <option value="ତୃତୀୟ ଶ୍ରେଣୀ">Class 3 (ତୃତୀୟ ଶ୍ରେଣୀ)</option>
+                                <option value="ଚତୁର୍ଥ ଶ୍ରେଣୀ">Class 4 (ଚତୁର୍ଥ ଶ୍ରେଣୀ)</option>
+                                <option value="ପଞ୍ଚମ ଶ୍ରେଣୀ">Class 5 (ପଞ୍ଚମ ଶ୍ରେଣୀ)</option>
+                                <option value="ଷଷ୍ଠ ଶ୍ରେଣୀ">Class 6 (ଷଷ୍ଠ ଶ୍ରେଣୀ)</option>
+                                <option value="ସପ୍ତମ ଶ୍ରେଣୀ">Class 7 (ସପ୍ତମ ଶ୍ରେଣୀ)</option>
+                                <option value="ଅଷ୍ଟମ ଶ୍ରେଣୀ">Class 8 (ଅଷ୍ଟମ ଶ୍ରେଣୀ)</option>
+                                <option value="ନବମ ଶ୍ରେଣୀ">Class 9 (ନବମ ଶ୍ରେଣୀ)</option>
+                                <option value="ଦଶମ ଶ୍ରେଣୀ">Class 10 (ଦଶମ ଶ୍ରେଣୀ)</option>
+                            </select>
+                            <select id="examFormatSelect" onchange="toggleExamFormatInputs()" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                                <option value="richtext">📝 Organized Rich Text</option>
+                                <option value="images">🖼️ Raw Question Images</option>
+                                <option value="html">🌐 HTML Webpage Link</option>
+                            </select>
+                        </div>
+                        <input id="examSubjectsInput" placeholder="Subject(s) comma-separated (e.g., Math, Science, Odia)" style="width:100%;padding:8px;margin-bottom:8px;border:1px solid #cbd5e1;border-radius:8px;">
+
+                        <div id="examRichTextWrap">
+                            <div style="display:flex; gap:5px; margin-bottom:6px; flex-wrap:wrap;">
+                                <button type="button" onclick="formatExamText('bold')" style="padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;"><b>B</b></button>
+                                <button type="button" onclick="formatExamText('italic')" style="padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;"><i>I</i></button>
+                                <button type="button" onclick="formatExamText('underline')" style="padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;"><u>U</u></button>
+                                <button type="button" onclick="formatExamText('insertUnorderedList')" style="padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;">• List</button>
+                                <button type="button" onclick="formatExamText('insertOrderedList')" style="padding:4px 9px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;">1. List</button>
+                                <button type="button" onclick="insertExamEmoji('📝 ')" style="padding:4px 7px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">📝</button>
+                                <button type="button" onclick="insertExamEmoji('⏰ ')" style="padding:4px 7px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">⏰</button>
+                                <button type="button" onclick="insertExamEmoji('✅ ')" style="padding:4px 7px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">✅</button>
+                                <button type="button" onclick="insertExamEmoji('⭐ ')" style="padding:4px 7px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">⭐</button>
+                                <button type="button" onclick="insertExamEmoji('📅 ')" style="padding:4px 7px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;">📅</button>
+                            </div>
+                            <div id="examRichEditor" contenteditable="true" style="min-height:110px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;margin-bottom:8px;font-size:13px;line-height:1.5;"></div>
+                        </div>
+
+                        <div id="examImagesWrap" class="hidden" style="margin-bottom:8px;">
+                            <div style="display:flex; gap:6px; margin-bottom:6px;">
+                                <select id="examRepoImgPicker" style="flex:1;padding:7px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;">
+                                    <option value="">-- Quick Add Image from GitHub Repo --</option>
+                                </select>
+                                <button type="button" onclick="insertGithubImgToExam()" class="btn-secondary" style="padding:6px 10px;font-size:12px;">+ Add</button>
+                            </div>
+                            <textarea id="examImagesInput" rows="3" placeholder="Paste question paper image URLs (1 per line — supports .webp, .png, .jpg)..." style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-family:inherit;"></textarea>
+                        </div>
+
+                        <input id="examHtmlUrlInput" class="hidden" placeholder="https://excellentinstitute.github.io/..." style="width:100%;padding:8px;margin-bottom:8px;border:1px solid #cbd5e1;border-radius:8px;">
+
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+                            <label style="font-size:12px; display:flex; align-items:center; gap:6px; cursor:pointer;">
+                                <input type="checkbox" id="chkPushExamAlert" checked> 🔔 Send Push Alert
+                            </label>
+                            <select id="examPushTargetMode" style="padding:6px 8px; border:1px solid #cbd5e1; border-radius:8px; font-size:12px;">
+                                <option value="all">To: All Students (Recommended)</option>
+                                <option value="class_only">To: Selected Class Topic Only</option>
+                            </select>
+                        </div>
+                        <button class="btn-primary" onclick="publishExamPaper()" style="width:100%; margin-bottom:14px;">📤 Publish Exam Paper</button>
+
+                        <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:6px;">Published Exam Papers (Live in App):</div>
+                        <div id="adminExamPapersList" style="display:flex; flex-direction:column; gap:6px; max-height:180px; overflow-y:auto;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ====================================================== -->
+            <!-- TAB 6: AI MODELS, CHUNKS EXPORT & SYSTEM SETTINGS      -->
+            <!-- ====================================================== -->
+            <div id="aiSystemView" class="view-section hidden">
+                <div class="hint-strip">
+                    💡 <b>AI &amp; System Hint:</b> Swap discontinued AI models here without rebuilding the APK. Periodically click <b>Move AI JSONs (Firebase → PC)</b> to archive student-generated Q&amp;A chunks into your free GitHub repo and keep Firestore usage near zero.
+                </div>
+                <div class="two-col-panel">
+                    <div class="panel-card">
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
+                            <h3 style="margin:0;">🤖 Foxy AI Models &amp; Quota</h3>
+                            <span id="aiModelHealthBadge" style="font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; background:#E6FBF5; color:#05CD99;">Checking Models...</span>
+                        </div>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+                            Update Gemini/Groq/TTS model priority lists live for Free, ₹100 Pro, and ₹49 Monthly tiers, run a live model health check, or toggle daily quotas.
+                        </p>
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <button class="btn-primary" onclick="openAiModelsModal()" title="View, edit, or live-test all 7 AI model lists without updating the APK">
+                                <i class='bx bx-chip'></i> 🤖 Manage AI Models &amp; Live Health Check
+                            </button>
+                            <button class="btn-secondary" onclick="manageAiConfigAndProSwitch()" title="Switch daily AI question limits ON (10 Free / 20 Pro / 50 Monthly) or OFF (Unlimited)" style="border-color:#FF8F00; color:#FF8F00;">
+                                <i class='bx bx-bot'></i> Toggle Pro Daily Quota Switch
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="panel-card">
+                        <h3 style="margin-bottom: 6px;">🛠️ Storage, Backup &amp; Compliance</h3>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+                            Export saved AI page chunks to GitHub, configure an optional backup PDF CDN mirror, or update your Play Store Privacy Policy link.
+                        </p>
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <button class="btn-secondary" onclick="moveFirebaseAiChunksToPc()" title="Download pending AI Q&A JSONs as a ZIP for GitHub & clear Firebase storage" style="border-color: #05CD99; color: #05CD99;">
+                                <i class='bx bx-transfer-alt'></i> 📦 Move AI JSONs (Firebase → PC ZIP)
+                            </button>
+                            <button class="btn-secondary" onclick="setBackupPdfMirror()" title="Optional backup CDN base URL (e.g., Cloudflare R2) if GitHub is ever slow" style="border-color:#3B82F6; color:#3B82F6;">
+                                <i class='bx bx-cloud'></i> ☁️ Configure Backup PDF Mirror
+                            </button>
+                            <button class="btn-secondary" onclick="editSimField('privacy_policy_url', 'Privacy Policy URL (Play Store Required)')" title="Update the Privacy Policy URL shown in App Settings" style="border-color:#6366F1; color:#6366F1;">
+                                <i class='bx bx-shield-quarter'></i> 🛡️ Edit Privacy Policy Link
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </main>
     </div>
 
+    <!-- RENAME SUBJECT MODAL -->
     <div id="renameModal" class="modal-overlay hidden">
         <div class="modal-card">
             <h3>Rename Subject</h3>
@@ -552,7 +637,7 @@
         </div>
     </div>
 
-    <!-- UPGRADE TO NEW BOOK / MOVE TO OLD BOOKS MODAL (AUTO-PICKS FROM RELEASE ASSETS) -->
+    <!-- UPGRADE TO NEW BOOK / MOVE TO OLD BOOKS MODAL -->
     <div id="upgradeBookModal" class="modal-overlay hidden">
         <div class="modal-card" style="max-width: 520px; width: 95%;">
             <div class="modal-header">
@@ -588,6 +673,7 @@
         </div>
     </div>
 
+    <!-- PREVIEW MODAL (Kept for backward compatibility) -->
     <div id="previewModal" class="modal-overlay hidden">
         <div class="modal-card preview-card" style="max-width: 500px;">
             <div class="modal-header">
@@ -615,7 +701,7 @@
         </div>
     </div>
 
-    <!-- LIVE IMAGE FIT & DISPLAY FRAME EDITOR (NO NEW IMAGE CREATED — SAVES DIRECTLY TO APP!) -->
+    <!-- LIVE IMAGE FIT & DISPLAY FRAME EDITOR (SUPPORTS SINGLE + BULK MODE!) -->
     <div id="imageFitModal" class="modal-overlay hidden">
         <div class="modal-card" style="max-width: 560px; width: 95%;">
             <div class="modal-header">
@@ -624,7 +710,7 @@
             </div>
             <p id="fitModalSubtitle" class="modal-subtitle">Exact preview of what students see inside the Android phone card box.</p>
 
-            <!-- Exact Phone 2-Column Card Replica (170x140 Android Ratio) -->
+            <!-- Exact Phone 2-Column Card Replica -->
             <div style="display:flex; justify-content:center; margin: 14px 0;">
                 <div style="width: 240px; border-radius: 20px; overflow: hidden; border: 2.5px solid #4318FF; background: #ffffff; box-shadow: 0 8px 20px rgba(0,0,0,0.12);">
                     <div id="fitPreviewBox" style="position: relative; width: 240px; height: 198px; overflow: hidden; background: #f1f5f9; cursor: grab; touch-action: none;">
@@ -638,12 +724,12 @@
 
             <!-- 3 Instant Fit Mode Buttons -->
             <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px;">
-                <button type="button" id="btnFitContain" class="btn-secondary" onclick="setFitMode('contain')" style="font-size:12px; padding:9px 6px;">📐 Fit Whole Image</button>
-                <button type="button" id="btnFitCover" class="btn-secondary" onclick="setFitMode('cover')" style="font-size:12px; padding:9px 6px;">🖼️ Fill &amp; Position</button>
-                <button type="button" id="btnFitFill" class="btn-secondary" onclick="setFitMode('fill')" style="font-size:12px; padding:9px 6px;">↔️ Stretch Fill</button>
+                <button type="button" id="btnFitContain" class="btn-secondary" onclick="setFitMode('contain')" title="Shows 100% of the cover image inside the box with zero cropping" style="font-size:12px; padding:9px 6px;">📐 Fit Whole Image</button>
+                <button type="button" id="btnFitCover" class="btn-secondary" onclick="setFitMode('cover')" title="Fills the box cleanly — drag the image or use sliders below to zoom & position" style="font-size:12px; padding:9px 6px;">🖼️ Fill &amp; Position</button>
+                <button type="button" id="btnFitFill" class="btn-secondary" onclick="setFitMode('fill')" title="Stretches image edge-to-edge to fill the box" style="font-size:12px; padding:9px 6px;">↔️ Stretch Fill</button>
             </div>
 
-            <!-- Focus & Zoom Sliders (Active in Fill & Position Mode) -->
+            <!-- Focus & Zoom Sliders -->
             <div id="fitPositionControls" style="background:#F8FAFC; padding:12px; border-radius:12px; border:1px solid #E2E8F0; margin-bottom: 12px;">
                 <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#334155;">
                     <span>Vertical Position (Top ↔ Bottom)</span><span id="fitYVal">50%</span>
@@ -661,6 +747,14 @@
                 <input type="range" id="fitZSlider" min="100" max="300" value="100" oninput="updateFitPreviewLive()" style="width:100%;">
             </div>
 
+            <!-- Bulk-Only Option: Preserve Custom 1-by-1 Overrides -->
+            <div id="bulkFitKeepCustomWrap" class="hidden" style="background:#EEF2FF; padding:10px 12px; border-radius:10px; margin-bottom:12px; font-size:12.5px; color:#1E293B;">
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600;">
+                    <input type="checkbox" id="chkBulkKeepCustomFit">
+                    Keep images that already have a custom 1-by-1 fit (skip overriding them)
+                </label>
+            </div>
+
             <div class="modal-actions">
                 <button class="btn-secondary" onclick="resetFitValues()">Reset</button>
                 <button class="btn-secondary" onclick="closeImageFitModal()">Cancel</button>
@@ -669,7 +763,7 @@
         </div>
     </div>
 
-    <!-- BUILT-IN PDF READER MODAL (Verify PDFs directly on Webpage!) -->
+    <!-- BUILT-IN PDF READER MODAL -->
     <div id="pdfReaderModal" class="modal-overlay hidden">
         <div class="modal-card" style="max-width: 960px; width: 96%; height: 90vh; display: flex; flex-direction: column;">
             <div class="modal-header" style="margin-bottom: 10px;">
@@ -697,7 +791,6 @@
                 Enter <b>1 model ID per line</b> in priority order (top = primary, below = automatic backups). Every installed Android app syncs these lists from Firestore <code>Admin/AiConfig</code> on its next session.
             </p>
 
-            <!-- Reported Discontinued Models Box -->
             <div id="modalDeadModelsBox" class="hidden" style="background:#FEF2F2; border:1px solid #FCA5A5; color:#991B1B; padding:12px; border-radius:10px; margin:12px 0; font-size:12.5px;">
                 <div style="font-weight:700; margin-bottom:4px;">🚨 Reported Discontinued / 404 Models:</div>
                 <div id="modalDeadModelsList" style="margin-bottom:8px;"></div>
@@ -711,15 +804,14 @@
                 </div>
             </div>
 
-            <!-- Live Test Controls -->
             <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
-                <button type="button" id="btnRunModelHealthCheck" class="btn-secondary" onclick="runLiveModelHealthCheck()" style="border-color:#4318FF; color:#4318FF; font-size:12.5px;">
+                <button type="button" id="btnRunModelHealthCheck" class="btn-secondary" onclick="runLiveModelHealthCheck()" title="Pings every model via your Cloudflare Worker (asks once for worker_app_token from strings.xml)" style="border-color:#4318FF; color:#4318FF; font-size:12.5px;">
                     <i class='bx bx-pulse'></i> 🔍 Test All Models Live (via Worker)
                 </button>
-                <button type="button" class="btn-secondary" onclick="resetAiModelDefaults()" style="font-size:12.5px;">
+                <button type="button" class="btn-secondary" onclick="resetAiModelDefaults()" title="Restore verified default model lists into the boxes below" style="font-size:12.5px;">
                     ↺ Load Verified Defaults
                 </button>
-                <button type="button" class="btn-secondary" onclick="resetWorkerAppToken()" style="font-size:12px;">
+                <button type="button" class="btn-secondary" onclick="resetWorkerAppToken()" title="Change the worker_app_token saved for this browser tab" style="font-size:12px;">
                     🔑 Reset Worker Token
                 </button>
             </div>
