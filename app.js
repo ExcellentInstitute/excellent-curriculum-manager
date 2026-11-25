@@ -166,25 +166,37 @@ const systemStatus = document.getElementById('systemStatus');
 const tabSimulatorBtn = document.getElementById('tabSimulatorBtn');
 const tabMaterialsBtn = document.getElementById('tabMaterialsBtn');
 const tabClassesBtn = document.getElementById('tabClassesBtn');
+const tabVideosLiveBtn = document.getElementById('tabVideosLiveBtn');
+const tabNoticesExamsBtn = document.getElementById('tabNoticesExamsBtn');
+const tabAiSystemBtn = document.getElementById('tabAiSystemBtn');
 
 const simulatorView = document.getElementById('simulatorView');
 const materialsView = document.getElementById('materialsView');
 const classCoversView = document.getElementById('classCoversView');
+const videosLiveView = document.getElementById('videosLiveView');
+const noticesExamsView = document.getElementById('noticesExamsView');
+const aiSystemView = document.getElementById('aiSystemView');
+
+const ALL_TAB_BTNS = [tabSimulatorBtn, tabMaterialsBtn, tabClassesBtn, tabVideosLiveBtn, tabNoticesExamsBtn, tabAiSystemBtn];
+const ALL_TAB_VIEWS = [simulatorView, materialsView, classCoversView, videosLiveView, noticesExamsView, aiSystemView];
 
 function switchDashboardTab(activeBtn, activeView) {
-    [tabSimulatorBtn, tabMaterialsBtn, tabClassesBtn].forEach(b => b.classList.remove('active'));
-    [simulatorView, materialsView, classCoversView].forEach(v => {
-        v.classList.remove('active');
-        v.classList.add('hidden');
+    ALL_TAB_BTNS.forEach(b => b?.classList.remove('active'));
+    ALL_TAB_VIEWS.forEach(v => {
+        v?.classList.remove('active');
+        v?.classList.add('hidden');
     });
-    activeBtn.classList.add('active');
-    activeView.classList.add('active');
-    activeView.classList.remove('hidden');
+    activeBtn?.classList.add('active');
+    activeView?.classList.add('active');
+    activeView?.classList.remove('hidden');
 }
 
 tabSimulatorBtn.addEventListener('click', () => switchDashboardTab(tabSimulatorBtn, simulatorView));
 tabMaterialsBtn.addEventListener('click', () => switchDashboardTab(tabMaterialsBtn, materialsView));
 tabClassesBtn.addEventListener('click', () => switchDashboardTab(tabClassesBtn, classCoversView));
+tabVideosLiveBtn?.addEventListener('click', () => switchDashboardTab(tabVideosLiveBtn, videosLiveView));
+tabNoticesExamsBtn?.addEventListener('click', () => switchDashboardTab(tabNoticesExamsBtn, noticesExamsView));
+tabAiSystemBtn?.addEventListener('click', () => switchDashboardTab(tabAiSystemBtn, aiSystemView));
 
 document.getElementById('searchInput').addEventListener('input', renderMaterialGrid);
 document.getElementById('classFilter').addEventListener('change', renderMaterialGrid);
@@ -510,12 +522,23 @@ async function loadDashboard() {
             };
         });
 
-        // Include standalone images in materials/ (for Image-Only cards)
+        // Build set of ALL image base URLs already used (ignoring #fit=... fragments so fitted covers NEVER reappear as offline!)
+        const usedImageBaseUrls = new Set();
+        Object.values(globalMergedData).forEach(m => {
+            if (m.imgUrl) usedImageBaseUrls.add(stripFitHash(m.imgUrl));
+        });
+        Object.values(liveClassCovers).forEach(u => {
+            if (u) usedImageBaseUrls.add(stripFitHash(u));
+        });
+        archivedBooksList.forEach(a => {
+            if (a.imgUrl) usedImageBaseUrls.add(stripFitHash(a.imgUrl));
+        });
+
+        // Include ONLY truly unused standalone images in materials/
         standaloneRepoImages.forEach((imgItem, idx) => {
             if (releaseNormSet.has(imgItem.norm)) return;
-            const alreadyUsed = Object.values(globalMergedData).some(
-                m => m.imgUrl === imgItem.imgUrl || normalizeBookKey(m.name) === imgItem.norm
-            );
+            const alreadyUsed = usedImageBaseUrls.has(stripFitHash(imgItem.imgUrl)) ||
+                Object.values(globalMergedData).some(m => normalizeBookKey(m.name) === imgItem.norm);
             if (!alreadyUsed) {
                 const key = `IMG__${idx}`;
                 globalMergedData[key] = {
@@ -1423,6 +1446,35 @@ function renderClassCoversGrid() {
 let activeFitContext = null;
 let activeFitMode = "cover";
 
+function launchFitModalWithPreview(contextObj, subtitleText, cardTitleText, sampleUrl) {
+    activeFitContext = contextObj;
+    const cfg = parseFitConfig(sampleUrl);
+    activeFitMode = cfg.fit;
+
+    const isBulk = contextObj.targetType === "BULK_CLASSES" || contextObj.targetType === "BULK_SUBJECTS";
+    const keepWrap = document.getElementById('bulkFitKeepCustomWrap');
+    const keepChk = document.getElementById('chkBulkKeepCustomFit');
+    if (keepWrap) keepWrap.classList.toggle('hidden', !isBulk);
+    if (keepChk) keepChk.checked = false;
+
+    document.getElementById('fitModalSubtitle').innerText = subtitleText;
+    document.getElementById('fitPreviewCardTitle').innerText = cardTitleText;
+    document.getElementById('fitXSlider').value = Math.round(cfg.x);
+    document.getElementById('fitYSlider').value = Math.round(cfg.y);
+    document.getElementById('fitZSlider').value = Math.round(cfg.z * 100);
+
+    const imgEl = document.getElementById('fitPreviewImg');
+    imgEl.onload = () => updateFitPreviewLive();
+    imgEl.src = stripFitHash(sampleUrl);
+
+    setFitMode(activeFitMode);
+    document.getElementById('imageFitModal').classList.remove('hidden');
+    if (imgEl.complete && imgEl.naturalWidth > 0) {
+        requestAnimationFrame(() => updateFitPreviewLive());
+    }
+    initFitBoxDragOnce();
+}
+
 window.openImageFitModal = (targetType, itemKey, displayName, className) => {
     let rawUrl = "";
     if (targetType === "CLASS") {
@@ -1438,27 +1490,62 @@ window.openImageFitModal = (targetType, itemKey, displayName, className) => {
         return showToast("Select a cover image first before adjusting its fit!", "error");
     }
 
-    activeFitContext = { targetType, itemKey, displayName, className, rawUrl };
-    const cfg = parseFitConfig(rawUrl);
-    activeFitMode = cfg.fit;
+    launchFitModalWithPreview(
+        { targetType, itemKey, displayName, className, rawUrl },
+        `Single Override: Adjust how "${displayName}" appears inside the Android phone box (no new image file created).`,
+        displayName,
+        rawUrl
+    );
+};
 
-    document.getElementById('fitModalSubtitle').innerText =
-        `Adjust how "${displayName}" appears inside the Android phone box (no new image file created).`;
-    document.getElementById('fitPreviewCardTitle').innerText = displayName;
-    document.getElementById('fitXSlider').value = Math.round(cfg.x);
-    document.getElementById('fitYSlider').value = Math.round(cfg.y);
-    document.getElementById('fitZSlider').value = Math.round(cfg.z * 100);
-
-    const imgEl = document.getElementById('fitPreviewImg');
-    imgEl.onload = () => updateFitPreviewLive();
-    imgEl.src = stripFitHash(rawUrl);
-
-    setFitMode(activeFitMode);
-    document.getElementById('imageFitModal').classList.remove('hidden');
-    if (imgEl.complete && imgEl.naturalWidth > 0) {
-        requestAnimationFrame(() => updateFitPreviewLive());
+window.openBulkImageFitModal = (bulkType) => {
+    if (bulkType === "BULK_CLASSES") {
+        const classesWithCovers = CLASSES.filter(cls => liveClassCovers[cls] && !liveClassCovers[cls].includes("placeholder"));
+        if (classesWithCovers.length === 0) {
+            return showToast("Save at least 1 Class Cover image before using Bulk Fit!", "error");
+        }
+        const sampleCls = classesWithCovers[0];
+        launchFitModalWithPreview(
+            { targetType: "BULK_CLASSES", targetClasses: classesWithCovers },
+            `Bulk Fit: Applies this setting to all ${classesWithCovers.length} Class Cover(s). Click 🖼️ on any single class later to override it.`,
+            `All ${classesWithCovers.length} Class Covers`,
+            liveClassCovers[sampleCls]
+        );
+        return;
     }
-    initFitBoxDragOnce();
+
+    // BULK_SUBJECTS: Use checked Live subjects, or if none checked, all visible Live subjects matching current filter
+    const checkedLive = Array.from(selectedMaterialKeys)
+        .map(k => globalMergedData[k])
+        .filter(i => i && i.isLive && i.imgUrl && !i.imgUrl.includes("placeholder"));
+
+    let targets = checkedLive;
+    if (targets.length === 0) {
+        const searchQuery = (document.getElementById('searchInput')?.value || "").toLowerCase();
+        const classFilter = document.getElementById('classFilter')?.value || "ALL";
+        targets = Object.values(globalMergedData).filter(i =>
+            i.isLive &&
+            i.imgUrl &&
+            !i.imgUrl.includes("placeholder") &&
+            (classFilter === "ALL" || i.currentClass === classFilter) &&
+            i.name.toLowerCase().includes(searchQuery)
+        );
+    }
+
+    if (targets.length === 0) {
+        return showToast("No Live Subject covers found to apply Bulk Fit!", "error");
+    }
+
+    const scopeLabel = checkedLive.length > 0
+        ? `${targets.length} Selected Live Subject(s)`
+        : `${targets.length} Visible Live Subject(s)`;
+
+    launchFitModalWithPreview(
+        { targetType: "BULK_SUBJECTS", targetItems: targets },
+        `Bulk Fit: Applies this display setting to ${scopeLabel}. Click 🖼️ on any single book later to override it.`,
+        scopeLabel,
+        targets[0].imgUrl
+    );
 };
 
 let fitDragInitialized = false;
@@ -1578,16 +1665,66 @@ window.updateFitPreviewLive = () => {
 
 window.saveImageFitToApp = async () => {
     if (!activeFitContext) return;
-    const { targetType, itemKey, displayName, className, rawUrl } = activeFitContext;
+    const { targetType, itemKey, displayName, className, rawUrl, targetClasses, targetItems } = activeFitContext;
     const cfg = {
         fit: activeFitMode,
         x: Number(document.getElementById('fitXSlider').value),
         y: Number(document.getElementById('fitYSlider').value),
         z: Number(document.getElementById('fitZSlider').value) / 100
     };
-    const finalFramedUrl = buildFitUrl(rawUrl, cfg);
+    const keepCustom = document.getElementById('chkBulkKeepCustomFit')?.checked === true;
 
     try {
+        if (targetType === "BULK_CLASSES") {
+            const updates = {};
+            let updatedCount = 0;
+            (targetClasses || []).forEach(cls => {
+                const cur = liveClassCovers[cls] || "";
+                if (!cur) return;
+                if (keepCustom && cur.includes("#fit=")) return;
+                const framed = buildFitUrl(cur, cfg);
+                updates[cls] = framed;
+                liveClassCovers[cls] = framed;
+                updatedCount++;
+            });
+            if (updatedCount === 0) {
+                closeImageFitModal();
+                return showToast("No class covers needed updating (custom fits kept).", "success");
+            }
+            await setDoc(doc(db, "Admin", "ClassCovers"), updates, { merge: true });
+            showToast(`✅ Bulk display fit applied to ${updatedCount} Class Cover(s)!`, "success");
+            closeImageFitModal();
+            renderClassCoversGrid();
+            renderInteractiveSimulator();
+            return;
+        }
+
+        if (targetType === "BULK_SUBJECTS") {
+            const byClass = {};
+            let updatedCount = 0;
+            (targetItems || []).forEach(item => {
+                if (!item.imgUrl) return;
+                if (keepCustom && item.imgUrl.includes("#fit=")) return;
+                const framed = buildFitUrl(item.imgUrl, cfg);
+                (byClass[item.currentClass] ||= {})[item.name] = framed;
+                updatedCount++;
+            });
+            if (updatedCount === 0) {
+                closeImageFitModal();
+                return showToast("No subject covers needed updating (custom fits kept).", "success");
+            }
+            for (const [cls, imgPatch] of Object.entries(byClass)) {
+                await setDoc(doc(db, "Curriculum", cls), { image_links: imgPatch }, { merge: true });
+            }
+            selectedMaterialKeys.clear();
+            showToast(`✅ Bulk display fit applied to ${updatedCount} Live Subject(s)!`, "success");
+            closeImageFitModal();
+            loadDashboard();
+            return;
+        }
+
+        const finalFramedUrl = buildFitUrl(rawUrl, cfg);
+
         if (targetType === "CLASS") {
             await setDoc(doc(db, "Admin", "ClassCovers"), { [itemKey]: finalFramedUrl }, { merge: true });
             liveClassCovers[itemKey] = finalFramedUrl;
